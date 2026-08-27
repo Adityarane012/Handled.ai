@@ -110,7 +110,7 @@ docs/                      Source of truth for scope & decisions (see below)
 - Flutter stays logic-free — new behavior goes in the backend.
 - Timeline pressure is real. When behind, cut `workflow_exception_approval` first — **never** cut RLS work or the PO approval flow.
 
-## Known issues / not yet done (as of 2026-08-27, post Week 4)
+## Known issues / not yet done (as of 2026-08-28)
 
 - **LLM generation is fallback-text only until Ollama runs** — start Ollama + `ollama pull llama3.2`, then re-run the smoke test.
 - **`flutter run -d windows` needs Windows Developer Mode ON** (plugin symlink support) — `start ms-settings:developers`. `-d chrome` / `build web` are unaffected.
@@ -129,11 +129,21 @@ docs/                      Source of truth for scope & decisions (see below)
 - **Flutter builds** — `flutter build web` → `√ Built build\web`; `flutter analyze` clean (only pre-existing infos); `flutter test` passes.
 - **Week 5** ✅ `OpsToolsScreen` (`/ops`) added — the app can now trigger all 5 tools + upload an inventory doc from the UI (previously only the approval queue was wired). Dashboard shows the real pending count.
 - **Week 6 / Phase 3** ✅ `backend/tests/` pytest suite — 15 tests green (tenant isolation, audit-log integrity, cost-control caps). Run: `cd backend && ..\venv\Scripts\python -m pytest`.
-- **Next:** Week 7–8 demo prep (seed data, demo script, rehearsals) — see `Implementation_Plan.md` §4. Start Ollama + `ollama pull` for real LLM output. Provider-side spend cap is still a manual checklist item (only matters on a paid provider). Optional: the DB migration #1–5 from the schema review.
+- **Repo** ✅ Weeks 3–6 committed as a clean linear history and **pushed to `origin/main`** (`github.com/Adityarane012/Handled.ai`). Commits: `89610f2` W3, `01dbb50` W4, `88aac71` W5, `f75da91` W6, `4c356fa` docs, `e876603` README/.env.example/.gitignore, `c2cd27a` README polish. Root `README.md` + `handled_app/README.md` + `backend/.env.example` in place. No `LICENSE` yet (deliberate — user's call).
+- **Next:** Week 7–8 demo prep (seed data, demo script, rehearsals) — see `Implementation_Plan.md` §4. Start Ollama + `ollama pull llama3.2` for real LLM output. Provider-side spend cap is a manual checklist item (only matters on a paid provider). Optional: the DB migration #1–5 from the schema review below.
 
-## Auth — open decision
+### DB schema migration #1–5 (proposed, not applied)
 
-Current: self-hosted JWT (`python-jose` HS256) + `passlib`/`bcrypt`, users in the `app_user` table. It works and costs nothing. "Heroku" is a host, not an auth provider — the real fork is **keep self-hosted JWT** vs. **Clerk** (hosted auth: hosted login UI, social login, MFA, user management console; needs Clerk JWT verification in `get_tenant_ctx` + a webhook to mirror users into `app_user` so RLS/FKs still work; free tier ~10k MAU; adds a third-party dependency the Phase-5 "self-hosted" story would later have to unwind). Recommendation for the prototype: **stay on self-hosted JWT**, revisit Clerk only if the incubator wants polished onboarding. Not blocking Week 5.
+Small migration worth doing before the demo — details in `docs/Progress.md`:
+1. `agent_action.requested_by UUID REFERENCES app_user(id)` — audit trail wants "who triggered", not just "who approved".
+2. `UNIQUE (company_id, type)` on `department` — nothing stops two `ops` rows.
+3. Index `agent_action (company_id, status)` — the approval-queue query filters on exactly this.
+4. RLS policy on `company` too (`id = NULLIF(current_setting('app.current_company_id', true), '')::UUID`) — the one tenant table with no policy; signup/login use the superuser engine so unaffected.
+5. On approve, flip status `approved` → `executed` after the (simulated) send — the `executed` state exists in the enum but is never reached.
+
+## Auth — decided
+
+**Self-hosted JWT for the prototype** (confirmed 2026-08-28): `python-jose` HS256 + `passlib`/`bcrypt`, users in `app_user`. Works, free, no third-party dependency. Clerk was considered (hosted login UI / social / MFA) but deferred — revisit only if the incubator wants polished onboarding; it would need Clerk-JWT verification in `get_tenant_ctx` + a webhook to mirror users into `app_user` so RLS/FKs still hold.
 
 ## Doc map (`docs/`)
 

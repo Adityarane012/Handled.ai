@@ -58,10 +58,28 @@ Manual checklist item still outstanding: set the hard monthly spend cap on the p
 - **Dashboard** now fetches the real pending-approvals count (was hardcoded `3`/`2`/`14`) and has quick-links to Ops Tools / Approvals.
 
 ### Still open
-- Real LLM generation needs Ollama running + a model pulled.
-- `inventory_qa` retrieval has no distance threshold — always returns nearest chunks; the "no matching record" refusal relies on the prompt. Add a score cutoff later.
-- `tests/` still empty — Phase 3 adversarial cross-tenant tests not written (the smoke test is a stopgap).
-- Auth strategy (keep self-hosted JWT vs. Clerk) + final schema review — see below / discussion with maintainer.
+- Real LLM generation needs Ollama running + a model pulled (`ollama pull llama3.2`).
+- `inventory_qa` retrieval has no distance threshold — always returns nearest chunks; the "no matching record" refusal relies on the prompt. Add a score cutoff before the demo.
+- DB schema migration #1–5 (see below) — proposed, not applied.
+- `LICENSE` — none yet; deliberate (maintainer's call).
+
+### Decided
+- **Auth: self-hosted JWT for the prototype.** Clerk deferred (revisit only if the incubator wants polished onboarding).
+
+---
+
+## Update — 2026-08-28: Git history + GitHub-ready
+
+- Weeks 3–6 were all uncommitted (the earlier session's Week 3 work was never committed either). Split into a clean linear history and **pushed to `origin/main`** — one commit per week (`89610f2` W3, `01dbb50` W4, `88aac71` W5, `f75da91` W6) plus `4c356fa` docs, `e876603` (README + `.env.example` + `.gitignore` tidy), `c2cd27a` (README polish). Verified the final tree is byte-identical to the pre-split snapshot.
+- Added root `README.md` (badges, Mermaid diagrams, quickstart, docs table), rewrote `handled_app/README.md` (was `flutter create` boilerplate), added `backend/.env.example`.
+- `.gitignore`: added `.pytest_cache/`, Flutter plugin lockfiles, `.antigravity/`; dropped the empty root `tests/` dir (tests live in `backend/tests/`).
+
+### DB schema migration #1–5 (proposed, not applied)
+1. `agent_action.requested_by UUID REFERENCES app_user(id)` — record who triggered an action, not just who approved it.
+2. `UNIQUE (company_id, type)` on `department` — prevent duplicate `ops` rows.
+3. Index `agent_action (company_id, status)` — the approval-queue query filters on exactly this pair.
+4. RLS policy on `company` (`id = NULLIF(current_setting('app.current_company_id', true), '')::UUID`) — the one tenant table without one; signup/login use the superuser engine so unaffected.
+5. On approve, flip `approved` → `executed` after the (simulated) send — `executed` exists in the enum but is never reached.
 
 ---
 
