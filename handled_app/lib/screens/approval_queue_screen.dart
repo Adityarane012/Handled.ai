@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
 
@@ -27,7 +26,7 @@ class _ApprovalQueueScreenState extends State<ApprovalQueueScreen> {
       _error = null;
     });
     try {
-      final data = await ApiService.get('/ops/approvals');
+      final data = await ApiService.getList('/ops/approvals');
       setState(() {
         _pendingApprovals = data;
         _isLoading = false;
@@ -122,7 +121,7 @@ class _ApprovalCardState extends State<_ApprovalCard> {
 
   Future<void> _submitDecision(String decision) async {
     setState(() => _isSubmitting = true);
-
+    
     Map<String, dynamic> manualFields = {};
     if (widget.action['tool_name'] == 'purchase_order_approval' && decision == 'approved') {
       manualFields = {
@@ -139,8 +138,20 @@ class _ApprovalCardState extends State<_ApprovalCard> {
       });
       widget.onResolved();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       setState(() => _isSubmitting = false);
+    }
+  }
+
+  String _titleForTool(String? toolName) {
+    switch (toolName) {
+      case 'workflow_exception_approval':
+        return 'Workflow Exception — needs a decision';
+      case 'purchase_order_approval':
+        return 'Purchase Order Request';
+      default:
+        return toolName ?? 'Pending action';
     }
   }
 
@@ -148,7 +159,7 @@ class _ApprovalCardState extends State<_ApprovalCard> {
   Widget build(BuildContext context) {
     final draft = widget.action['draft_output'] ?? {};
     final isPO = widget.action['tool_name'] == 'purchase_order_approval';
-
+    
     // Safety check: isPO requires manual inputs before approval
     bool canApprove = true;
     if (isPO) {
@@ -187,14 +198,38 @@ class _ApprovalCardState extends State<_ApprovalCard> {
           ),
           const SizedBox(height: 16),
           Text(
-            isPO ? 'Purchase Order Request: ${draft['item_name'] ?? 'Unknown Item'}' : widget.action['tool_name'],
+            isPO
+                ? 'Purchase Order Request: ${draft['input']?['item_name'] ?? draft['item_name'] ?? 'Unknown Item'}'
+                : _titleForTool(widget.action['tool_name']),
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 8),
 
+          if (!isPO) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.background,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: AppTheme.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Agent Reasoning', style: TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textSecondary, fontSize: 12)),
+                  const SizedBox(height: 8),
+                  Text(
+                    draft['agent_output'] ?? draft['agent_justification'] ?? 'No details provided.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           if (isPO) ...[
-            Text('Current Stock: ${draft['current_stock']}', style: Theme.of(context).textTheme.bodyMedium),
-            Text('Vendor: ${draft['preferred_vendor'] ?? 'Any'}', style: Theme.of(context).textTheme.bodyMedium),
+            Text('Current Stock: ${draft['input']?['current_stock'] ?? draft['current_stock'] ?? '-'}', style: Theme.of(context).textTheme.bodyMedium),
+            Text('Vendor: ${draft['input']?['preferred_vendor'] ?? draft['preferred_vendor'] ?? 'Not specified'}', style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(16),
@@ -208,7 +243,7 @@ class _ApprovalCardState extends State<_ApprovalCard> {
                 children: [
                   const Text('Agent Justification', style: TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textSecondary, fontSize: 12)),
                   const SizedBox(height: 8),
-                  Text(draft['agent_justification'] ?? 'No justification provided.', style: Theme.of(context).textTheme.bodyMedium),
+                  Text(draft['agent_output'] ?? draft['agent_justification'] ?? 'No justification provided.', style: Theme.of(context).textTheme.bodyMedium),
                 ],
               ),
             ),
@@ -250,7 +285,7 @@ class _ApprovalCardState extends State<_ApprovalCard> {
               ElevatedButton(
                 onPressed: (_isSubmitting || !canApprove) ? null : () => _submitDecision('approved'),
                 style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryAction),
-                child: _isSubmitting
+                child: _isSubmitting 
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Text('Approve'),
               )

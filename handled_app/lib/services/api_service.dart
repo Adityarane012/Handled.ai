@@ -49,4 +49,18 @@ class ApiService {
       throw Exception('API Error ${response.statusCode}: ${response.body}');
     }
   }
+
+  /// For endpoints that return a JSON array (e.g. GET /ops/approvals).
+  static Future<List<dynamic>> getList(String endpoint) async {
+    final uri = Uri.parse('$baseUrl$endpoint');
+    final headers = await _getHeaders();
+
+    final response = await http.get(uri, headers: headers);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return jsonDecode(response.body) as List<dynamic>;
+    } else {
+      throw Exception('API Error ${response.statusCode}: ${response.body}');
+    }
+  }
 }

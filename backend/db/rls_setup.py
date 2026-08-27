@@ -11,7 +11,7 @@ Usage:
     Called automatically from the init_db script.
 """
 from sqlalchemy import text
-from db.session import engine
+from db.session import admin_engine
 
 
 RLS_SETUP_SQL = """
@@ -27,33 +27,49 @@ DROP POLICY IF EXISTS tenant_isolation_action ON agent_action;
 
 -- Create isolation policies
 -- These check the session variable set by set_tenant_context() in session.py
+-- NULLIF(..., '') is required: once a dotted GUC has been SET in a session,
+-- Postgres reverts it to an EMPTY STRING (not NULL) when the SET LOCAL scope
+-- ends. Without NULLIF, a query that runs after the request's transaction has
+-- committed would evaluate ''::UUID and raise, instead of simply matching no
+-- rows.
 CREATE POLICY tenant_isolation_user ON app_user
-    USING (company_id = current_setting('app.current_company_id', true)::UUID);
+    USING (company_id = NULLIF(current_setting('app.current_company_id', true), '')::UUID);
 
 CREATE POLICY tenant_isolation_dept ON department
-    USING (company_id = current_setting('app.current_company_id', true)::UUID);
+    USING (company_id = NULLIF(current_setting('app.current_company_id', true), '')::UUID);
 
 CREATE POLICY tenant_isolation_action ON agent_action
-    USING (company_id = current_setting('app.current_company_id', true)::UUID);
+    USING (company_id = NULLIF(current_setting('app.current_company_id', true), '')::UUID);
 
--- IMPORTANT: The 'true' parameter in current_setting makes it return NULL
--- instead of erroring when the variable isn't set. This means:
+-- Behaviour:
 -- - Superuser/migration connections (no tenant set) bypass RLS by default
 -- - App connections with the variable set get filtered correctly
--- - App connections WITHOUT the variable set get NO rows (safe default)
+-- - App connections WITHOUT it set (or reset to '') get NO rows — safe default,
+--   and no error
 """
 
 
+def _has_sql(fragment: str) -> bool:
+    """True if the fragment has a real statement once SQL line-comments are stripped."""
+    body = "\n".join(
+        ln for ln in fragment.splitlines() if not ln.strip().startswith("--")
+    )
+    return bool(body.strip())
+
+
 def apply_rls():
-    """Apply RLS policies to all tenant-scoped tables."""
-    with engine.connect() as conn:
-        # Execute as raw SQL — RLS is a Postgres feature, not ORM
+    """
+    Apply RLS policies to all tenant-scoped tables.
+
+    Uses the admin (superuser) connection — ALTER TABLE / CREATE POLICY require
+    table ownership, which the runtime `handled_app` role does not have.
+    """
+    with admin_engine.connect() as conn:
         for statement in RLS_SETUP_SQL.split(";"):
-            statement = statement.strip()
-            if statement:
+            if _has_sql(statement):
                 conn.execute(text(statement))
         conn.commit()
-    print("✅ RLS policies applied successfully.")
+    print("RLS policies applied successfully.")
 
 
 if __name__ == "__main__":

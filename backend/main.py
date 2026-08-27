@@ -13,10 +13,10 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 from models.db_models import Base
-from db.session import engine
+from db.session import admin_engine
 
 from routers import auth, company
-from routers.ops import purchase, approvals
+from routers.ops import purchase, approvals, status, inventory, vendor, exception
 
 app = FastAPI(
     title="handled.ai",
@@ -28,6 +28,10 @@ app.include_router(auth.router)
 app.include_router(company.router)
 app.include_router(purchase.router, prefix="/ops", tags=["ops"])
 app.include_router(approvals.router, prefix="/ops", tags=["ops"])
+app.include_router(status.router, prefix="/ops", tags=["ops"])
+app.include_router(inventory.router, prefix="/ops", tags=["ops"])
+app.include_router(vendor.router, prefix="/ops", tags=["ops"])
+app.include_router(exception.router, prefix="/ops", tags=["ops"])
 
 # CORS — permissive for dev, lock down for production
 app.add_middleware(
@@ -51,4 +55,4 @@ def on_startup():
     Create tables on startup for dev convenience.
     In production, use Alembic migrations instead.
     """
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=admin_engine)

@@ -17,11 +17,19 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:devpass@localhos
 
 DATABASE_URL_ADMIN = os.getenv("DATABASE_URL_ADMIN", "postgresql://postgres:devpass@localhost:5432/handled_dev")
 
+# expire_on_commit=False: after commit we still read attributes off the ORM
+# object (id, status, draft_output) without SQLAlchemy firing a fresh SELECT.
+# That fresh SELECT would run outside the request's tenant-context transaction
+# and trip the RLS policy on the (now empty-string) session GUC.
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(
+    autocommit=False, autoflush=False, expire_on_commit=False, bind=engine
+)
 
 admin_engine = create_engine(DATABASE_URL_ADMIN, pool_pre_ping=True)
-AdminSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=admin_engine)
+AdminSessionLocal = sessionmaker(
+    autocommit=False, autoflush=False, expire_on_commit=False, bind=admin_engine
+)
 
 
 def get_db():

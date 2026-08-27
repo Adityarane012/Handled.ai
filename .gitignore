@@ -9,6 +9,9 @@ build/
 .vscode/
 *.db
 
+# RAG vector store (local Chroma persistence)
+backend/.chroma/
+
 # Flutter
 handled_app/.dart_tool/
 handled_app/build/

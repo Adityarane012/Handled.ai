@@ -1,8 +1,8 @@
 """
 Pydantic request/response schemas for handled.ai API.
 """
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, Any
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from typing import Optional, Any, List
 from uuid import UUID
 from datetime import datetime
 
@@ -40,18 +40,18 @@ class CompanyResponse(BaseModel):
 # ─── Agent Actions ──────────────────────────────────────────────────────────
 
 class AgentActionResponse(BaseModel):
-    id: str
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
     tool_name: str
     action_type: str
     status: str
+    department_id: Optional[UUID] = None
     draft_output: Optional[Any] = None
     final_output: Optional[Any] = None
-    approved_by: Optional[str] = None
+    approved_by: Optional[UUID] = None
     approved_at: Optional[datetime] = None
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class ApprovalRequest(BaseModel):
@@ -83,8 +83,24 @@ class InventoryQuestion(BaseModel):
     question: str
 
 
+class InventoryUpload(BaseModel):
+    """The company's inventory document — chunked + embedded for inventory_qa."""
+    doc_text: str = Field(..., min_length=1)
+    source: str = "upload"
+
+
+class OpsStatusSummaryRequest(BaseModel):
+    """Optional raw activity log to summarise. If omitted, the router supplies recent agent_action rows."""
+    activity_log: Optional[str] = None
+
+
 class VendorUpdateRequest(BaseModel):
-    """Request to send a vendor status update using a pre-approved template."""
+    """
+    Request a vendor status update. Wording is NEVER free-generated — either
+    `template_key` names one of the fixed templates, or `situation` is given and
+    the agent only classifies which template applies. `details` fills the blanks.
+    """
     vendor_name: str
-    template_key: str  # Must match one of TOOL_REGISTRY templates
-    details: Optional[dict] = None  # Template fill values
+    template_key: Optional[str] = None
+    situation: Optional[str] = None
+    details: Optional[dict] = None

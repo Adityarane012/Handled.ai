@@ -1,15 +1,15 @@
 """
-Manual RLS verification test for handled.ai.
-Per Build Guide Step 6: prove RLS works with raw SQL, no app code involved.
+Manual RLS verification for handled.ai — Build Guide Week 1, Step 6.
+Prove cross-tenant isolation with raw SQL, no app/ORM code involved.
 
-This script:
-1. Creates two fake companies with users and actions
-2. Sets tenant context to Company A
-3. Queries for Company B's data — should return NOTHING
-4. Verifies isolation works in both directions
+Design (matches the Phase 1B role split):
+  - FIXTURES + CLEANUP run on the admin/superuser connection (`admin_engine`).
+    Superusers bypass RLS — that's the correct way to seed test data.
+  - ISOLATION ASSERTIONS run on the runtime connection (`engine`, role
+    `handled_app`), which RLS actually governs, with `SET LOCAL
+    app.current_company_id` as the per-transaction tenant context.
 
-Run AFTER init_db.py:
-    python test_rls_manual.py
+Run after init_db.py:  python test_rls_manual.py
 """
 import sys
 import os
@@ -18,134 +18,109 @@ import uuid
 sys.path.insert(0, os.path.dirname(__file__))
 
 from sqlalchemy import text
-from db.session import engine
+from db.session import engine, admin_engine
+
+PASS, FAIL = "PASS", "FAIL"
+_failed = []
 
 
-def test_rls():
-    """Prove cross-tenant isolation with raw SQL."""
-    company_a_id = str(uuid.uuid4())
-    company_b_id = str(uuid.uuid4())
+def _log(tag, msg):
+    if tag == FAIL:
+        _failed.append(msg)
+    print(f"  [{tag}] {msg}")
 
-    with engine.connect() as conn:
-        # ─── Setup: insert two companies and their data ────────────────
 
-        # Company A
-        conn.execute(text(
-            "INSERT INTO company (id, name) VALUES (:id, :name)"
-        ), {"id": company_a_id, "name": "Test Company A (RLS Test)"})
+def _count(conn, sql, **params):
+    return len(conn.execute(text(sql), params).fetchall())
 
-        conn.execute(text(
-            "INSERT INTO app_user (id, company_id, name, email, password_hash, role) "
-            "VALUES (:id, :cid, :name, :email, :pw, :role)"
-        ), {
-            "id": str(uuid.uuid4()), "cid": company_a_id,
-            "name": "Alice", "email": f"alice-{uuid.uuid4().hex[:8]}@test.com",
-            "pw": "fakehash", "role": "owner_admin"
-        })
 
-        conn.execute(text(
-            "INSERT INTO department (id, company_id, type) VALUES (:id, :cid, :type)"
-        ), {"id": str(uuid.uuid4()), "cid": company_a_id, "type": "ops"})
+def test_rls() -> bool:
+    a, b = str(uuid.uuid4()), str(uuid.uuid4())
 
-        # Company B
-        conn.execute(text(
-            "INSERT INTO company (id, name) VALUES (:id, :name)"
-        ), {"id": company_b_id, "name": "Test Company B (RLS Test)"})
+    # ─── Fixtures (admin: RLS bypassed) ──────────────────────────────────
+    with admin_engine.begin() as adm:
+        for cid, cname, uname in [(a, "RLS Co A", "Alice"), (b, "RLS Co B", "Bob")]:
+            adm.execute(text("INSERT INTO company (id, name) VALUES (:id, :n)"),
+                        {"id": cid, "n": cname})
+            adm.execute(text(
+                "INSERT INTO app_user (id, company_id, name, email, password_hash, role) "
+                "VALUES (:id, :cid, :n, :e, 'x', 'owner_admin')"),
+                {"id": str(uuid.uuid4()), "cid": cid, "n": uname,
+                 "e": f"{uname.lower()}-{uuid.uuid4().hex[:8]}@rls.test"})
+            adm.execute(text("INSERT INTO department (id, company_id, type) VALUES (:id, :cid, 'ops')"),
+                        {"id": str(uuid.uuid4()), "cid": cid})
+            adm.execute(text(
+                "INSERT INTO agent_action (id, company_id, tool_name, action_type, status) "
+                "VALUES (:id, :cid, 'ops_status_summary', 'auto', 'auto_executed')"),
+                {"id": str(uuid.uuid4()), "cid": cid})
 
-        conn.execute(text(
-            "INSERT INTO app_user (id, company_id, name, email, password_hash, role) "
-            "VALUES (:id, :cid, :name, :email, :pw, :role)"
-        ), {
-            "id": str(uuid.uuid4()), "cid": company_b_id,
-            "name": "Bob", "email": f"bob-{uuid.uuid4().hex[:8]}@test.com",
-            "pw": "fakehash", "role": "owner_admin"
-        })
+    try:
+        # ─── Assertions (runtime role: RLS enforced) ─────────────────────
+        with engine.connect() as conn:
+            # 1. context A -> cannot see B's users
+            conn.execute(text("SET LOCAL app.current_company_id = :c"), {"c": a})
+            _log(PASS if _count(conn, "SELECT * FROM app_user WHERE company_id = :c", c=b) == 0
+                 else FAIL, "context A: B's app_user rows -> 0")
+            conn.rollback()
 
-        conn.execute(text(
-            "INSERT INTO department (id, company_id, type) VALUES (:id, :cid, :type)"
-        ), {"id": str(uuid.uuid4()), "cid": company_b_id, "type": "ops"})
+            # 2. context B -> cannot see A's users
+            conn.execute(text("SET LOCAL app.current_company_id = :c"), {"c": b})
+            _log(PASS if _count(conn, "SELECT * FROM app_user WHERE company_id = :c", c=a) == 0
+                 else FAIL, "context B: A's app_user rows -> 0")
+            conn.rollback()
 
-        conn.commit()
+            # 3. context A -> sees its own user (positive control)
+            conn.execute(text("SET LOCAL app.current_company_id = :c"), {"c": a})
+            _log(PASS if _count(conn, "SELECT * FROM app_user WHERE company_id = :c", c=a) == 1
+                 else FAIL, "context A: A's own app_user rows -> 1")
+            conn.rollback()
 
-        # ─── Test 1: Set context to A, query for B's users ────────────
+            # 4. context A -> cannot see B's departments
+            conn.execute(text("SET LOCAL app.current_company_id = :c"), {"c": a})
+            _log(PASS if _count(conn, "SELECT * FROM department WHERE company_id = :c", c=b) == 0
+                 else FAIL, "context A: B's department rows -> 0")
+            conn.rollback()
 
-        conn.execute(text("SET LOCAL app.current_company_id = :cid"), {"cid": company_a_id})
-        result = conn.execute(text(
-            "SELECT * FROM app_user WHERE company_id = :cid"
-        ), {"cid": company_b_id})
-        rows_b_from_a = result.fetchall()
+            # 5. context A -> cannot see B's agent_action rows (the audit table)
+            conn.execute(text("SET LOCAL app.current_company_id = :c"), {"c": a})
+            _log(PASS if _count(conn, "SELECT * FROM agent_action WHERE company_id = :c", c=b) == 0
+                 else FAIL, "context A: B's agent_action rows -> 0")
+            conn.rollback()
 
-        if len(rows_b_from_a) == 0:
-            print("✅ TEST 1 PASSED: Company A context → querying Company B's users → 0 rows (RLS blocked it)")
-        else:
-            print(f"❌ TEST 1 FAILED: Got {len(rows_b_from_a)} rows — RLS is NOT working!")
-            return False
+            # 6. no context set -> zero rows, and NO error (NULLIF hardening)
+            try:
+                n = _count(conn, "SELECT * FROM app_user")
+                _log(PASS if n == 0 else FAIL, f"no tenant context: app_user rows -> 0 (got {n})")
+            except Exception as e:  # noqa: BLE001
+                _log(FAIL, f"no tenant context raised instead of returning 0 rows: {e}")
+            conn.rollback()
 
-        conn.commit()  # Reset SET LOCAL scope
+            # 7. runtime role cannot INSERT a row for a tenant it isn't scoped to
+            conn.execute(text("SET LOCAL app.current_company_id = :c"), {"c": a})
+            try:
+                conn.execute(text(
+                    "INSERT INTO agent_action (id, company_id, tool_name, action_type, status) "
+                    "VALUES (:id, :cid, 't', 'auto', 'auto_executed')"),
+                    {"id": str(uuid.uuid4()), "cid": b})
+                _log(FAIL, "cross-tenant INSERT was allowed (should be blocked by RLS WITH CHECK)")
+            except Exception:
+                _log(PASS, "cross-tenant INSERT blocked by RLS")
+            conn.rollback()
+    finally:
+        # ─── Cleanup (admin) ────────────────────────────────────────────
+        with admin_engine.begin() as adm:
+            for cid in (a, b):
+                adm.execute(text("DELETE FROM agent_action WHERE company_id = :c"), {"c": cid})
+                adm.execute(text("DELETE FROM app_user WHERE company_id = :c"), {"c": cid})
+                adm.execute(text("DELETE FROM department WHERE company_id = :c"), {"c": cid})
+                adm.execute(text("DELETE FROM company WHERE id = :c"), {"c": cid})
 
-        # ─── Test 2: Set context to B, query for A's users ────────────
-
-        conn.execute(text("SET LOCAL app.current_company_id = :cid"), {"cid": company_b_id})
-        result = conn.execute(text(
-            "SELECT * FROM app_user WHERE company_id = :cid"
-        ), {"cid": company_a_id})
-        rows_a_from_b = result.fetchall()
-
-        if len(rows_a_from_b) == 0:
-            print("✅ TEST 2 PASSED: Company B context → querying Company A's users → 0 rows (RLS blocked it)")
-        else:
-            print(f"❌ TEST 2 FAILED: Got {len(rows_a_from_b)} rows — RLS is NOT working!")
-            return False
-
-        conn.commit()
-
-        # ─── Test 3: Set context to A, query A's own users (should work) ──
-
-        conn.execute(text("SET LOCAL app.current_company_id = :cid"), {"cid": company_a_id})
-        result = conn.execute(text(
-            "SELECT * FROM app_user WHERE company_id = :cid"
-        ), {"cid": company_a_id})
-        rows_a_from_a = result.fetchall()
-
-        if len(rows_a_from_a) == 1:
-            print("✅ TEST 3 PASSED: Company A context → querying Company A's own users → 1 row (correct)")
-        else:
-            print(f"⚠️  TEST 3 UNEXPECTED: Got {len(rows_a_from_a)} rows (expected 1)")
-
-        conn.commit()
-
-        # ─── Test 4: Department isolation ──────────────────────────────
-
-        conn.execute(text("SET LOCAL app.current_company_id = :cid"), {"cid": company_a_id})
-        result = conn.execute(text(
-            "SELECT * FROM department WHERE company_id = :cid"
-        ), {"cid": company_b_id})
-        dept_rows = result.fetchall()
-
-        if len(dept_rows) == 0:
-            print("✅ TEST 4 PASSED: Company A context → querying Company B's departments → 0 rows")
-        else:
-            print(f"❌ TEST 4 FAILED: Got {len(dept_rows)} rows — department RLS not working!")
-            return False
-
-        conn.commit()
-
-        # ─── Cleanup ──────────────────────────────────────────────────
-        # Clean up test data (superuser connection, no RLS applied)
-        conn.execute(text("RESET app.current_company_id"))
-        conn.execute(text("DELETE FROM app_user WHERE company_id IN (:a, :b)"),
-                     {"a": company_a_id, "b": company_b_id})
-        conn.execute(text("DELETE FROM department WHERE company_id IN (:a, :b)"),
-                     {"a": company_a_id, "b": company_b_id})
-        conn.execute(text("DELETE FROM company WHERE id IN (:a, :b)"),
-                     {"a": company_a_id, "b": company_b_id})
-        conn.commit()
-
-    print("\n🎉 All RLS tests passed! Tenant isolation is confirmed working.")
-    print("You can now safely build API routes knowing RLS has your back.")
+    if _failed:
+        print(f"\nRESULT: {len(_failed)} FAILED")
+        return False
+    print("\nRESULT: all RLS isolation checks passed — tenant isolation confirmed.")
     return True
 
 
 if __name__ == "__main__":
-    success = test_rls()
-    sys.exit(0 if success else 1)
+    sys.exit(0 if test_rls() else 1)
