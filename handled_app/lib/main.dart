@@ -7,6 +7,7 @@ import 'providers/auth_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/dashboard_shell.dart';
+import 'screens/approval_queue_screen.dart';
 
 void main() {
   runApp(
@@ -57,7 +58,10 @@ class HandledApp extends StatelessWidget {
               path: '/',
               builder: (context, state) => const DashboardPlaceholder(),
             ),
-            // Ops routes will go here in Phase 2
+            GoRoute(
+              path: '/approvals',
+              builder: (context, state) => const ApprovalQueueScreen(),
+            ),
           ],
         ),
       ],

@@ -16,6 +16,7 @@ from models.db_models import Base
 from db.session import engine
 
 from routers import auth, company
+from routers.ops import purchase, approvals
 
 app = FastAPI(
     title="handled.ai",
@@ -25,6 +26,8 @@ app = FastAPI(
 
 app.include_router(auth.router)
 app.include_router(company.router)
+app.include_router(purchase.router, prefix="/ops", tags=["ops"])
+app.include_router(approvals.router, prefix="/ops", tags=["ops"])
 
 # CORS — permissive for dev, lock down for production
 app.add_middleware(

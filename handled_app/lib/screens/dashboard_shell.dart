@@ -60,25 +60,9 @@ class DashboardShell extends StatelessWidget {
                 ),
 
                 // Navigation Links
-                _buildNavItem(
-                  context,
-                  icon: Icons.dashboard_outlined,
-                  label: 'Overview',
-                  route: '/',
-                  isSelected: true,
-                ),
-                _buildNavItem(
-                  context,
-                  icon: Icons.inventory_2_outlined,
-                  label: 'Inventory (Ops)',
-                  route: '/ops',
-                ),
-                _buildNavItem(
-                  context,
-                  icon: Icons.pending_actions_outlined,
-                  label: 'Approvals',
-                  route: '/approvals',
-                ),
+                _buildNavItem(context, icon: Icons.dashboard_outlined, label: 'Overview', route: '/'),
+                _buildNavItem(context, icon: Icons.inventory_2_outlined, label: 'Inventory (Ops)', route: '/ops'),
+                _buildNavItem(context, icon: Icons.pending_actions_outlined, label: 'Approvals', route: '/approvals'),
 
                 const Spacer(),
 
@@ -157,18 +141,15 @@ class DashboardShell extends StatelessWidget {
     );
   }
 
-  Widget _buildNavItem(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required String route,
-    bool isSelected = false,
-  }) {
+  Widget _buildNavItem(BuildContext context, {required IconData icon, required String label, required String route}) {
+    final location = GoRouterState.of(context).matchedLocation;
+    final isSelected = location == route;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
       child: InkWell(
         onTap: () {
-          // Navigation logic will go here
+          context.go(route);
         },
         borderRadius: BorderRadius.circular(6),
         child: Container(
@@ -179,20 +160,12 @@ class DashboardShell extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(
-                icon,
-                size: 18,
-                color: isSelected
-                    ? AppTheme.textPrimary
-                    : AppTheme.textSecondary,
-              ),
+              Icon(icon, size: 18, color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary),
               const SizedBox(width: 12),
               Text(
                 label,
                 style: TextStyle(
-                  color: isSelected
-                      ? AppTheme.textPrimary
-                      : AppTheme.textSecondary,
+                  color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
                   fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
                   fontSize: 14,
                 ),
