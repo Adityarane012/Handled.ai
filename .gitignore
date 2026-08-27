@@ -1,12 +1,14 @@
+# Python
 venv/
 __pycache__/
 *.pyc
-.env
 *.egg-info/
+.pytest_cache/
 dist/
 build/
-.idea/
-.vscode/
+
+# Environment / secrets
+.env
 *.db
 
 # RAG vector store (local Chroma persistence)
@@ -17,13 +19,20 @@ handled_app/.dart_tool/
 handled_app/build/
 handled_app/.pub-cache/
 handled_app/.pub/
+handled_app/.flutter-plugins
+handled_app/.flutter-plugins-dependencies
 
-# Antigravity & Agent Artifacts
+# Editors / IDEs
+.idea/
+.vscode/
+
+# Agent / assistant artifacts
 .agents/
 .claude/
 .gemini/
+.antigravity/
 scratch/
 
-# OS Files
+# OS files
 .DS_Store
 Thumbs.db
