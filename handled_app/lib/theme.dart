@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
+/// Typeface. To use Inter, drop Inter-*.ttf into assets/fonts/, declare the
+/// family in pubspec.yaml, and set this to 'Inter'. Left null for now so the
+/// app builds with the bundled default (google_fonts was removed — its
+/// transitive path_provider/objective_c hook breaks on spaces in the home path).
+const String? _fontFamily = null;
 
 class AppTheme {
   // Linear-inspired minimal dark palette
@@ -20,30 +25,31 @@ class AppTheme {
       scaffoldBackgroundColor: background,
       primaryColor: primaryAction,
 
-      // Typography: Inter for a crisp, high-density SaaS look
-      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme)
-          .copyWith(
-            displayLarge: GoogleFonts.inter(
-              color: textPrimary,
-              fontWeight: FontWeight.w700,
-            ),
-            titleLarge: GoogleFonts.inter(
-              color: textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
-            bodyLarge: GoogleFonts.inter(
-              color: textPrimary,
-              fontWeight: FontWeight.w400,
-            ),
-            bodyMedium: GoogleFonts.inter(
-              color: textSecondary,
-              fontWeight: FontWeight.w400,
-            ),
-            labelLarge: GoogleFonts.inter(
-              color: textPrimary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+      // Typography: crisp, high-density SaaS look. fontFamily is _fontFamily
+      // (null = bundled default) applied via ThemeData.fontFamily below.
+      textTheme: ThemeData.dark().textTheme.copyWith(
+        displayLarge: const TextStyle(
+          color: textPrimary,
+          fontWeight: FontWeight.w700,
+        ),
+        titleLarge: const TextStyle(
+          color: textPrimary,
+          fontWeight: FontWeight.w600,
+        ),
+        bodyLarge: const TextStyle(
+          color: textPrimary,
+          fontWeight: FontWeight.w400,
+        ),
+        bodyMedium: const TextStyle(
+          color: textSecondary,
+          fontWeight: FontWeight.w400,
+        ),
+        labelLarge: const TextStyle(
+          color: textPrimary,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      fontFamily: _fontFamily,
 
       // Input fields: clean, bordered, no heavy fills
       inputDecorationTheme: InputDecorationTheme(
@@ -69,8 +75,8 @@ class AppTheme {
           horizontal: 16,
           vertical: 14,
         ),
-        hintStyle: GoogleFonts.inter(color: textSecondary),
-        labelStyle: GoogleFonts.inter(color: textSecondary),
+        hintStyle: const TextStyle(color: textSecondary),
+        labelStyle: const TextStyle(color: textSecondary),
       ),
 
       // Buttons: Solid but minimal
@@ -81,7 +87,7 @@ class AppTheme {
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-          textStyle: GoogleFonts.inter(
+          textStyle: const TextStyle(
             fontWeight: FontWeight.w600,
             fontSize: 14,
           ),
@@ -91,7 +97,7 @@ class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: textSecondary,
-          textStyle: GoogleFonts.inter(
+          textStyle: const TextStyle(
             fontWeight: FontWeight.w500,
             fontSize: 14,
           ),

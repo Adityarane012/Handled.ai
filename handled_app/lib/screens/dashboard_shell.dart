@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
+import '../services/api_service.dart';
 import '../theme.dart';
 
 class DashboardShell extends StatelessWidget {
@@ -61,7 +62,7 @@ class DashboardShell extends StatelessWidget {
 
                 // Navigation Links
                 _buildNavItem(context, icon: Icons.dashboard_outlined, label: 'Overview', route: '/'),
-                _buildNavItem(context, icon: Icons.inventory_2_outlined, label: 'Inventory (Ops)', route: '/ops'),
+                _buildNavItem(context, icon: Icons.bolt_outlined, label: 'Ops Tools', route: '/ops'),
                 _buildNavItem(context, icon: Icons.pending_actions_outlined, label: 'Approvals', route: '/approvals'),
 
                 const Spacer(),
@@ -144,7 +145,7 @@ class DashboardShell extends StatelessWidget {
   Widget _buildNavItem(BuildContext context, {required IconData icon, required String label, required String route}) {
     final location = GoRouterState.of(context).matchedLocation;
     final isSelected = location == route;
-
+    
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
       child: InkWell(
@@ -178,9 +179,31 @@ class DashboardShell extends StatelessWidget {
   }
 }
 
-// Temporary placeholder for the dashboard content
-class DashboardPlaceholder extends StatelessWidget {
-  const DashboardPlaceholder({Key? key}) : super(key: key);
+// Dashboard overview — shows the real pending-approvals count.
+class DashboardPlaceholder extends StatefulWidget {
+  const DashboardPlaceholder({super.key});
+
+  @override
+  State<DashboardPlaceholder> createState() => _DashboardPlaceholderState();
+}
+
+class _DashboardPlaceholderState extends State<DashboardPlaceholder> {
+  String _pending = '—';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final list = await ApiService.getList('/ops/approvals');
+      if (mounted) setState(() => _pending = list.length.toString());
+    } catch (_) {
+      if (mounted) setState(() => _pending = '—');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -191,29 +214,34 @@ class DashboardPlaceholder extends StatelessWidget {
         children: [
           Text(
             'Overview',
-            style: Theme.of(
-              context,
-            ).textTheme.displayLarge?.copyWith(fontSize: 28),
+            style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 28),
           ),
           const SizedBox(height: 8),
           Text(
             'Your operations command center.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyLarge?.copyWith(color: AppTheme.textSecondary),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 48),
-
-          // Stats Row
           Row(
             children: [
-              _buildStatCard('Pending Approvals', '3', context),
+              _buildStatCard('Pending Approvals', _pending, context),
               const SizedBox(width: 24),
-              _buildStatCard('Active Agents', '2', context),
-              const SizedBox(width: 24),
-              _buildStatCard('Tasks Today', '14', context),
+              _buildStatCard('Ops Department', 'Active', context),
             ],
           ),
+          const SizedBox(height: 32),
+          Wrap(spacing: 12, children: [
+            OutlinedButton.icon(
+              onPressed: () => context.go('/ops'),
+              icon: const Icon(Icons.bolt_outlined, size: 18),
+              label: const Text('Run an Ops tool'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => context.go('/approvals'),
+              icon: const Icon(Icons.pending_actions_outlined, size: 18),
+              label: const Text('Review approvals'),
+            ),
+          ]),
         ],
       ),
     );

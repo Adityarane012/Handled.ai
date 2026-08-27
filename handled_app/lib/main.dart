@@ -8,6 +8,7 @@ import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/dashboard_shell.dart';
 import 'screens/approval_queue_screen.dart';
+import 'screens/ops_tools_screen.dart';
 
 void main() {
   runApp(
@@ -57,6 +58,10 @@ class HandledApp extends StatelessWidget {
             GoRoute(
               path: '/',
               builder: (context, state) => const DashboardPlaceholder(),
+            ),
+            GoRoute(
+              path: '/ops',
+              builder: (context, state) => const OpsToolsScreen(),
             ),
             GoRoute(
               path: '/approvals',
