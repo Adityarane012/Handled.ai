@@ -65,11 +65,25 @@ def index_inventory_document(company_id: str, doc_text: str, source: str = "uplo
     return len(chunks)
 
 
+# hnsw defaults to l2 distance on normalized MiniLM embeddings, so lower is
+# closer; a match past MAX_DISTANCE is treated as noise, not a real hit.
+_MAX_DISTANCE = float(os.environ.get("RAG_MAX_DISTANCE", "1.1"))
+
+
 def retrieve_inventory_chunks(company_id: str, question: str, k: int = 4) -> List[str]:
-    """Return up to k inventory passages relevant to the question ([] if none indexed)."""
+    """
+    Return up to k inventory passages relevant to the question. Empty if nothing
+    is indexed, or if the nearest matches are too far to be a real answer (rather
+    than relying solely on the prompt to say "no matching record").
+    """
     col = _collection(company_id)
     if col.count() == 0:
         return []
-    res = col.query(query_texts=[question], n_results=min(k, col.count()))
-    docs = res.get("documents") or [[]]
-    return docs[0] if docs else []
+    res = col.query(
+        query_texts=[question],
+        n_results=min(k, col.count()),
+        include=["documents", "distances"],
+    )
+    docs = (res.get("documents") or [[]])[0]
+    dists = (res.get("distances") or [[]])[0]
+    return [doc for doc, dist in zip(docs, dists) if dist <= _MAX_DISTANCE]

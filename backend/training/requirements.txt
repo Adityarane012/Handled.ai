@@ -1,0 +1,18 @@
+# Separate env from backend/requirements.txt on purpose — heavy CUDA/GPU deps
+# with no business in the FastAPI backend venv.
+#
+# Setup:
+#   python -m venv training/venv
+#   training\venv\Scripts\activate
+#   pip install -r training/requirements.txt
+#
+# If bitsandbytes/unsloth fail to build on native Windows, use WSL2 (Ubuntu)
+# with this same file instead — Unsloth's Linux path is far better tested.
+
+torch --index-url https://download.pytorch.org/whl/cu121
+unsloth
+trl
+peft
+accelerate
+bitsandbytes
+datasets
