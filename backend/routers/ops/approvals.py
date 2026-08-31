@@ -47,11 +47,13 @@ def approve_action(payload: ApprovalRequest, db: Session = Depends(get_db), ctx=
             final_output = dict(action.draft_output or {})
             final_output.update(payload.manual_fields)
             action.final_output = final_output
-            action.status = "approved"
-            
+            # No real external send in the prototype — approval IS the send, so
+            # go straight to `executed` rather than parking at `approved`.
+            action.status = "executed"
+
         else:
             action.final_output = action.draft_output
-            action.status = "approved"
+            action.status = "executed"
             
     elif payload.decision == "rejected":
         action.status = "rejected"

@@ -38,6 +38,7 @@ def answer_inventory_question(
         {"question": payload.question, "context_chunks": chunks},
         ctx.company_id,
         db,
+        requested_by=ctx.user_id,
     )
     return {
         "id": str(action.id),

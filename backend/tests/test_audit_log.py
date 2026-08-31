@@ -93,7 +93,7 @@ def test_approve_merges_manual_fields_without_losing_draft(client, make_company,
     row = admin_conn.execute(text(
         "SELECT status, draft_output, final_output FROM agent_action WHERE id = :i"),
         {"i": pid}).fetchone()
-    assert row[0] == "approved"
+    assert row[0] == "executed"
     assert row[1] == draft_before                      # draft still intact
     assert row[2]["quantity"] == 250                   # human's numbers recorded
     assert row[2]["amount"] == 9999.5

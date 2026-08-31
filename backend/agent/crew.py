@@ -213,6 +213,7 @@ def run_tool(
     context: Dict[str, Any],
     company_id: str,
     db: Session,
+    requested_by: Optional[str] = None,
 ) -> AgentAction:
     """
     Execute an Ops tool end-to-end and return the persisted AgentAction row.
@@ -256,6 +257,7 @@ def run_tool(
         status=status,
         draft_output=draft_output,
         final_output=final_output,
+        requested_by=requested_by,
     )
     db.add(action)
     db.flush()   # populate Python-side defaults (id, created_at) inside the txn

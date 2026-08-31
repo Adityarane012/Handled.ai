@@ -49,6 +49,7 @@ class AgentActionResponse(BaseModel):
     department_id: Optional[UUID] = None
     draft_output: Optional[Any] = None
     final_output: Optional[Any] = None
+    requested_by: Optional[UUID] = None
     approved_by: Optional[UUID] = None
     approved_at: Optional[datetime] = None
     created_at: datetime
