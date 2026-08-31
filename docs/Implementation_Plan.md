@@ -18,15 +18,16 @@ handled.ai gives small Indian companies with no dedicated departmental staff an 
 - ✅ **Persona Development, Ideation Doc, Stakeholder Matrix** — earlier course-template deliverables
 - ✅ Naming, tool selection (5 Ops tools across all 3 autonomy buckets), tech stack, role model all confirmed
 
-### What Needs to Be Built
-- 🔲 FastAPI backend (auth, tenant scoping, RLS-backed data layer)
-- 🔲 Flutter app (signup, Ops dashboard, per-tool screens, approval queue)
-- 🔲 CrewAI orchestration layer + tool risk-classification table
-- 🔲 5 Ops tools wired end-to-end via third-party LLM API
-- 🔲 Adversarial multi-tenant isolation testing
-- 🔲 Phase 2: synthetic data → LoRA fine-tune → self-hosted serving
-- 🔲 Phase 3: second department module + real catalog picker
-- 🔲 Phase 4: production-distribution concerns (code-signing, auto-update)
+### Build Status (updated 2026-08-30)
+- ✅ FastAPI backend (auth, tenant scoping, RLS-backed data layer) — Phases 1–2 done
+- ✅ Flutter app (login/signup, Ops dashboard w/ live pending count, `/ops` per-tool screen, approval queue) — Phases 1–2 done
+- ✅ CrewAI orchestration layer + hard-coded `TOOL_REGISTRY` risk table — done
+- ✅ 5 Ops tools wired end-to-end — verified via API and from the Flutter UI (real LLM output via local Ollama `llama3.2:3b`, provider-swappable)
+- ✅ Adversarial multi-tenant isolation testing — `backend/tests/`, 15 tests green (isolation, audit-log integrity, cost caps)
+- 🟡 Phase 4 (Weeks 7–8): demo prep — **current phase, not started** (seed data, rehearsed script, LLM-failure fallback)
+- 🟡 Phase 5: self-hosted model — training pipeline landed early (`backend/training/`), see revised Phase 5 note below
+- 🔲 Phase 6: second department module + real catalog picker
+- 🔲 Phase 7: production-distribution concerns (code-signing, auto-update)
 
 ---
 
@@ -380,9 +381,11 @@ def draft_vendor_update(payload: VendorUpdateRequest, ctx=Depends(get_tenant_ctx
 
 ---
 
-## Phase 3 — Hardening & Integration (Week 6) 🔒
+## Phase 3 — Hardening & Integration (Week 6) 🔒 ✅ DONE
 
 > **Goal:** Prove the safety model actually holds under adversarial conditions, not just in the happy path.
+>
+> **Status (2026-08-30):** `backend/tests/` — 15 pytest tests green: adversarial cross-tenant (API + RLS-alone), audit-log integrity (every tool writes a row; reject/approve preserve the draft), cost-control caps loaded + applied. Run `cd backend && ..\venv\Scripts\python -m pytest`.
 
 ### 3.1 — Adversarial Cross-Tenant Test
 ```python
@@ -436,15 +439,29 @@ Two test companies (to demo isolation live if asked), sample inventory doc for t
 6. If time allows: `workflow_exception_approval`, showing the agent's SOP-violation reasoning.
 7. Briefly show a second company logged in, unable to see Company A's data.
 
+### 4.3 — Open items surfaced by the 2026-08-30 end-to-end run
+- [ ] **`inventory_qa` answer quality on the local model.** Retrieval + the new distance cutoff work, but `llama3.2:3b` gave a weak/incorrect answer ("no record" when the doc had it) on a tiny 1-chunk doc. Re-test with the fine-tuned `handled-ops` model (or a stronger tag) before relying on it in the demo. If still weak, script the demo around a doc with clearly separated chunks.
+- [ ] **`ops_status_summary` from the UI sends a thin activity log** → model returns "no data". Seed the demo company with a realistic activity log so this reads well.
+- [ ] **Dashboard stat cards** other than the live pending count are still literals — either wire them or drop them before the demo (cosmetic but visible).
+- [ ] **`.env` model tag** — `LLM_MODEL=llama3.2` only resolves because `llama3.2:latest` was aliased locally; on a fresh machine set `LLM_MODEL=llama3.2:3b` or pull `llama3.2`.
+
 ### ✅ Phase 4 Exit Criteria
 - [ ] Full script rehearsed at least twice end-to-end
 - [ ] Fallback plan documented if a live LLM call fails mid-demo (pre-recorded backup / cached response)
+- [ ] Seed data script committed (two companies, activity log, inventory doc, PO + exception scenarios)
 
 ---
 
 ## Phase 5 — Self-Hosted Model Migration (Months 4–6, post-prototype) 🖥️
 
 > **Goal:** Make the "data never leaves our servers" claim actually true — swap the generation call only, per `arch.md`'s forward-compatibility design.
+>
+> **Status (2026-08-30) — pipeline landed early, toolchain revised.** A working local QLoRA pipeline is committed in `backend/training/` (`synthesize_data.py` → `train_lora.py` → `export_gguf.py`), ahead of the Months 4–6 slot. Deviations from the original sketch below, all deliberate:
+> - **Base model:** Qwen2.5-3B-Instruct (not Llama-3.1-8B) — fits the dev machine, and matches the 3B class we can realistically self-host.
+> - **Serving:** import the exported GGUF into **Ollama** (`ollama create handled-ops -f Modelfile`), not vLLM. The generation call already routes through `LLM_PROVIDER=ollama` in `agent/crew.py`, so the swap is just `LLM_MODEL=handled-ops` — zero orchestration change, same as the vLLM plan intended. vLLM stays the option if we later need throughput.
+> - **Data synthesis:** bootstrapped via the *local* Ollama model, not a paid API — keeps the no-cost phase intact.
+> - Weights/data are gitignored (`backend/training/{data,models}/`, `*.gguf`); the trained GGUF is handed off out-of-band.
+> - **Still open:** 5.3 eval loop (hold-out comparison) not yet built; 5.5 exit criterion (all 5 tools re-validated against `handled-ops` with no orchestration change) not yet done.
 
 ### 5.1 — Synthetic Training Data Generation
 ```python

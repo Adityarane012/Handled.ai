@@ -95,7 +95,7 @@ docs/                      Source of truth for scope & decisions (see below)
 - **Backend:** `cd backend && ..\venv\Scripts\uvicorn main:app --reload` → http://localhost:8000 (`/health`, `/docs`).
 - **DB:** local Postgres, db `handled_dev`. Runtime connects as non-superuser `handled_app` (RLS enforced); all DDL (`init_db.py`, `rls_setup.py`, startup `create_all`) uses the `postgres` superuser via `admin_engine`. Both URLs in `backend/.env`.
 - **First-time DB setup:** `python init_db.py` then `python test_rls_manual.py` (must pass before building on top).
-- **LLM — local Ollama (no-cost phase):** `.env` has `LLM_PROVIDER=ollama`, `LLM_MODEL=llama3.2`, `OLLAMA_BASE_URL=http://localhost:11434`. To get real generation: start Ollama (installed at `C:\Users\Aditya Rane\AppData\Local\Programs\Ollama\ollama.EXE`) and `ollama pull llama3.2` (or a smaller tag like `llama3.2:1b` / `qwen2.5:3b`). Until then, tools return labelled fallback text — the app still works. Flip `LLM_PROVIDER` back to `anthropic`/`openai`/`gemini` + set the key to use a hosted model.
+- **LLM — local Ollama, fine-tuned model:** `.env` has `LLM_PROVIDER=ollama`, `LLM_MODEL=handled-ops`, `OLLAMA_BASE_URL=http://localhost:11434`. `handled-ops:latest` is a fine-tuned Qwen2.5-3B (QLoRA, from `backend/training/`) registered in Ollama from `backend/training/models/handled-ops-qwen2.5-3b/handled-ops-qwen2.5-3b.Q4_K_M.gguf` (gitignored; `ollama create handled-ops -f Modelfile` in that dir). Start Ollama (installed at `C:\Users\Aditya Rane\AppData\Local\Programs\Ollama\ollama.EXE`) before running the backend. Fallbacks: `LLM_MODEL=llama3.2` (base, `ollama pull llama3.2`) or flip `LLM_PROVIDER` to `anthropic`/`openai`/`gemini` + key for a hosted model. If Ollama is down or the model is missing, tools return labelled fallback text — the app still works.
 - **`inventory_qa` RAG:** first call downloads the MiniLM ONNX embedding model (~80 MB, one-time, then offline). Vectors persist in `backend/.chroma/` (gitignored).
 - **Flutter:** `cd handled_app && flutter run -d windows` (or `-d chrome`). SDK at `C:\Users\Aditya Rane\flutter`.
 - **CrewAI caps:** `CREW_MAX_ITER=6`, `CREW_MAX_RPM=10`, `LLM_MONTHLY_SPEND_CAP_USD=20` (only relevant on a paid provider).
@@ -110,27 +110,28 @@ docs/                      Source of truth for scope & decisions (see below)
 - Flutter stays logic-free — new behavior goes in the backend.
 - Timeline pressure is real. When behind, cut `workflow_exception_approval` first — **never** cut RLS work or the PO approval flow.
 
-## Known issues / not yet done (as of 2026-08-28)
+## Known issues / not yet done (as of 2026-08-31)
 
-- **LLM generation is fallback-text only until Ollama runs** — start Ollama + `ollama pull llama3.2`, then re-run the smoke test.
+- **LLM generation is live on the fine-tuned local model** (`LLM_MODEL=handled-ops`). Verified end-to-end 2026-08-31 (5 tools via API + Flutter UI; PO draft correctly omits quantity/price). Ollama must be running; if it's down, tools fall back to labelled text.
 - **`flutter run -d windows` needs Windows Developer Mode ON** (plugin symlink support) — `start ms-settings:developers`. `-d chrome` / `build web` are unaffected.
 - `google_fonts` was removed (its `objective_c` native-assets hook breaks on the space in `C:\Users\Aditya Rane\`). Theme uses the bundled default font; flip `_fontFamily` in `theme.dart` to `'Inter'` after vendoring `Inter-*.ttf` into `assets/fonts/` + declaring it in `pubspec.yaml`.
-- **`inventory_qa` retrieval has no distance threshold** — Chroma always returns the nearest chunks, so "no matching record" relies on the prompt telling the model to refuse. Add a score cutoff in `agent/rag.py::retrieve_inventory_chunks` before the demo.
+- **`inventory_qa` distance threshold** ✅ added (`RAG_MAX_DISTANCE`, default 1.1, in `agent/rag.py::retrieve_inventory_chunks`, commit `3b3ebcb`). But on a 3B model with a tiny single-chunk doc the answer quality is still weak — re-test against `handled-ops` with a multi-chunk doc before the demo.
 - **`tests/` is still empty** — Phase 3 adversarial cross-tenant tests not written. `scratchpad/smoke_week4.py` (in the session scratchpad) is the current stopgap; port it into `tests/` with pytest.
 - `dashboard_shell.dart` stat cards are placeholder literals (`3`, `2`, `14`); no dashboard screen calls the tool endpoints yet — only the approval queue is wired.
 - Signup/login screens not reviewed in depth.
 - `crewai` prints noisy `Failed to connect to OpenAI API` lines when Ollama is down — cosmetic; the fallback still fires.
 - Auth strategy not finalised — see below.
 
-## Status (2026-08-28, Weeks 0–6 done)
+## Status (2026-08-31, Weeks 0–6 done; fine-tuned LLM wired in)
 
 - **Weeks 0–3** ✅ regression-checked (`scratchpad/verify_w0_w3.py`): deps, DB schema, RLS (enabled + NULLIF-hardened), `/health`, signup→owner+Ops, JWT login, `/auth/me`, tenant isolation, PO tool + approval queue (400 without numbers, approved with, reject retains row), Flutter safety UI. `test_rls_manual.py` was stale (seeded fixtures over the RLS role) — **rewritten** to seed via `admin_engine` + assert over the runtime role; now passes 7/7.
 - **Phase 2 / Week 4** ✅ **all 5 Ops tools built + verified end-to-end** (smoke test: signup → 5 tools → approval queue → approve PO with manual numbers → 2nd-company isolation holds). Generic `run_tool()` dispatcher + `TOOL_REGISTRY` lookup + RAG retrieval working. Real LLM output pending Ollama.
 - **Flutter builds** — `flutter build web` → `√ Built build\web`; `flutter analyze` clean (only pre-existing infos); `flutter test` passes.
 - **Week 5** ✅ `OpsToolsScreen` (`/ops`) added — the app can now trigger all 5 tools + upload an inventory doc from the UI (previously only the approval queue was wired). Dashboard shows the real pending count.
 - **Week 6 / Phase 3** ✅ `backend/tests/` pytest suite — 15 tests green (tenant isolation, audit-log integrity, cost-control caps). Run: `cd backend && ..\venv\Scripts\python -m pytest`.
+- **Fine-tuned LLM (2026-08-31)** ✅ `backend/training/` QLoRA pipeline (Qwen2.5-3B, Unsloth) landed via `3b3ebcb`; the exported GGUF was registered as `handled-ops:latest` in Ollama and `.env` now points at it (`LLM_MODEL=handled-ops`). End-to-end re-verified: all 5 tools via API + the Flutter UI, on the fine-tuned model. This is Phase 5's generation swap done early — orchestration untouched. Still open: 5.3 eval loop, formal 5.5 sign-off.
 - **Repo** ✅ Weeks 3–6 committed as a clean linear history and **pushed to `origin/main`** (`github.com/Adityarane012/Handled.ai`). Commits: `89610f2` W3, `01dbb50` W4, `88aac71` W5, `f75da91` W6, `4c356fa` docs, `e876603` README/.env.example/.gitignore, `c2cd27a` README polish. Root `README.md` + `handled_app/README.md` + `backend/.env.example` in place. No `LICENSE` yet (deliberate — user's call).
-- **Next:** Week 7–8 demo prep (seed data, demo script, rehearsals) — see `Implementation_Plan.md` §4. Start Ollama + `ollama pull llama3.2` for real LLM output. Provider-side spend cap is a manual checklist item (only matters on a paid provider). Optional: the DB migration #1–5 from the schema review below.
+- **Next:** Week 7–8 demo prep (seed data, demo script, rehearsals) — see `Implementation_Plan.md` §4. LLM is live on `handled-ops` (just start Ollama before the backend). Build the 5.3 eval loop (hold-out synthetic pairs) to justify the fine-tune. Provider-side spend cap is a manual checklist item (only matters on a paid provider). Optional: the DB migration #1–5 from the schema review below.
 
 ### DB schema migration #1–5 (proposed, not applied)
 
