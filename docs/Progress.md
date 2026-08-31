@@ -1,6 +1,13 @@
 # Handled.ai Progress Report
 **Date:** 2026-08-27 (Week 4 wrap-up)
 
+## Update — 2026-08-31: DB migration applied, real generation confirmed, docs de-staled
+
+- **DB schema migration #1–5 applied** to the live `handled_dev` DB and pushed (`605b9f8`): `agent_action.requested_by`, `UNIQUE(company_id, type)` on `department`, index on `agent_action(company_id, status)`, RLS policy on `company`, approve now flips straight `pending_approval` → `executed` (no intermediate `approved` state — approval IS the send in this prototype). Verified via `pytest` (15/15) and `test_rls_manual.py` (7/7) before pushing.
+- **Real LLM generation confirmed working end-to-end** — `handled-ops` (the QLoRA fine-tune from the 2026-08-30 session, commit `3b3ebcb`) is pulled into Ollama and set as `LLM_MODEL`. Smoke test: signup → login → `POST /ops/status-summary` returned real generated bullet-point text (~10s/call), not fallback.
+- **Two "known issues" turned out to already be fixed**, just not logged: `inventory_qa`'s distance cutoff (`agent/rag.py::_MAX_DISTANCE`) shipped with the QLoRA commit; `dashboard_shell.dart`'s stat cards already call `/ops/approvals` for a real pending count (not the old placeholder literals). Updated `CLAUDE.md`'s "Known issues" section to drop stale entries so they don't get re-proposed.
+- **Still open:** Week 7–8 demo prep (seed data, walkthrough script, rehearsals) — not started.
+
 ## Update — 2026-08-27: Phase 2 / Week 4 complete + local-LLM switch
 
 ### LLM: switched to local Ollama (no-cost phase)

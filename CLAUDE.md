@@ -110,17 +110,16 @@ docs/                      Source of truth for scope & decisions (see below)
 - Flutter stays logic-free — new behavior goes in the backend.
 - Timeline pressure is real. When behind, cut `workflow_exception_approval` first — **never** cut RLS work or the PO approval flow.
 
-## Known issues / not yet done (as of 2026-08-28)
+## Known issues / not yet done (as of 2026-08-31)
 
-- **LLM generation is fallback-text only until Ollama runs** — start Ollama + `ollama pull llama3.2`, then re-run the smoke test.
 - **`flutter run -d windows` needs Windows Developer Mode ON** (plugin symlink support) — `start ms-settings:developers`. `-d chrome` / `build web` are unaffected.
 - `google_fonts` was removed (its `objective_c` native-assets hook breaks on the space in `C:\Users\Aditya Rane\`). Theme uses the bundled default font; flip `_fontFamily` in `theme.dart` to `'Inter'` after vendoring `Inter-*.ttf` into `assets/fonts/` + declaring it in `pubspec.yaml`.
-- **`inventory_qa` retrieval has no distance threshold** — Chroma always returns the nearest chunks, so "no matching record" relies on the prompt telling the model to refuse. Add a score cutoff in `agent/rag.py::retrieve_inventory_chunks` before the demo.
-- **`tests/` is still empty** — Phase 3 adversarial cross-tenant tests not written. `scratchpad/smoke_week4.py` (in the session scratchpad) is the current stopgap; port it into `tests/` with pytest.
-- `dashboard_shell.dart` stat cards are placeholder literals (`3`, `2`, `14`); no dashboard screen calls the tool endpoints yet — only the approval queue is wired.
 - Signup/login screens not reviewed in depth.
 - `crewai` prints noisy `Failed to connect to OpenAI API` lines when Ollama is down — cosmetic; the fallback still fires.
-- Auth strategy not finalised — see below.
+- No demo seed data / rehearsed walkthrough script yet — Week 7–8 work, not started.
+- `LICENSE` — none yet; deliberate (maintainer's call).
+
+Resolved since the 2026-08-28 pass (kept here so nobody re-proposes them): real LLM generation via the fine-tuned `handled-ops` Ollama model (confirmed end-to-end, ~10s/call); `inventory_qa` distance-cutoff (`agent/rag.py::_MAX_DISTANCE`, already shipped in the QLoRA commit); `backend/tests/` — 15 tests green; dashboard stat cards — `DashboardPlaceholder` already fetches the real pending-approvals count; DB schema migration #1–5 — applied and pushed (`605b9f8`).
 
 ## Status (2026-08-28, Weeks 0–6 done)
 
@@ -129,17 +128,10 @@ docs/                      Source of truth for scope & decisions (see below)
 - **Flutter builds** — `flutter build web` → `√ Built build\web`; `flutter analyze` clean (only pre-existing infos); `flutter test` passes.
 - **Week 5** ✅ `OpsToolsScreen` (`/ops`) added — the app can now trigger all 5 tools + upload an inventory doc from the UI (previously only the approval queue was wired). Dashboard shows the real pending count.
 - **Week 6 / Phase 3** ✅ `backend/tests/` pytest suite — 15 tests green (tenant isolation, audit-log integrity, cost-control caps). Run: `cd backend && ..\venv\Scripts\python -m pytest`.
-- **Repo** ✅ Weeks 3–6 committed as a clean linear history and **pushed to `origin/main`** (`github.com/Adityarane012/Handled.ai`). Commits: `89610f2` W3, `01dbb50` W4, `88aac71` W5, `f75da91` W6, `4c356fa` docs, `e876603` README/.env.example/.gitignore, `c2cd27a` README polish. Root `README.md` + `handled_app/README.md` + `backend/.env.example` in place. No `LICENSE` yet (deliberate — user's call).
-- **Next:** Week 7–8 demo prep (seed data, demo script, rehearsals) — see `Implementation_Plan.md` §4. Start Ollama + `ollama pull llama3.2` for real LLM output. Provider-side spend cap is a manual checklist item (only matters on a paid provider). Optional: the DB migration #1–5 from the schema review below.
-
-### DB schema migration #1–5 (proposed, not applied)
-
-Small migration worth doing before the demo — details in `docs/Progress.md`:
-1. `agent_action.requested_by UUID REFERENCES app_user(id)` — audit trail wants "who triggered", not just "who approved".
-2. `UNIQUE (company_id, type)` on `department` — nothing stops two `ops` rows.
-3. Index `agent_action (company_id, status)` — the approval-queue query filters on exactly this.
-4. RLS policy on `company` too (`id = NULLIF(current_setting('app.current_company_id', true), '')::UUID`) — the one tenant table with no policy; signup/login use the superuser engine so unaffected.
-5. On approve, flip status `approved` → `executed` after the (simulated) send — the `executed` state exists in the enum but is never reached.
+- **Repo** ✅ Weeks 3–6 committed as a clean linear history and **pushed to `origin/main`** (`github.com/Adityarane012/Handled.ai`). Commits: `89610f2` W3, `01dbb50` W4, `88aac71` W5, `f75da91` W6, `4c356fa` docs, `e876603` README/.env.example/.gitignore, `c2cd27a` README polish, `3b3ebcb` QLoRA fine-tuning pipeline, `605b9f8` DB migration #1–5. Root `README.md` + `handled_app/README.md` + `backend/.env.example` in place. No `LICENSE` yet (deliberate — user's call).
+- **Fine-tuned model** ✅ `handled-ops` (QLoRA on Qwen2.5-3B-Instruct) is pulled into Ollama and set as `LLM_MODEL` in `.env` (`LLM_PROVIDER=ollama`). Verified 2026-08-31: signup → login → `/ops/status-summary` returns real generated text (~10s/call), not fallback.
+- **DB migration #1–5** ✅ applied to the live `handled_dev` DB and pushed (`605b9f8`) — `agent_action.requested_by`, `department` UNIQUE(company_id, type), `agent_action(company_id, status)` index, RLS policy on `company`, approve flips straight to `executed`. Both regression suites green after: `pytest` 15/15, `test_rls_manual.py` 7/7.
+- **Next:** Week 7–8 demo prep (seed data, demo script, rehearsals) — see `Implementation_Plan.md` §4. Not started yet.
 
 ## Auth — decided
 
