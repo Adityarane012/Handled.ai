@@ -23,13 +23,15 @@ class AuthProvider extends ChangeNotifier {
 
     if (token != null) {
       try {
-        // Verify token by calling /auth/me
-        final userData = await ApiService.get('/auth/me');
+        // Verify token by calling /auth/me. Timeout so a slow-starting or
+        // unreachable backend can't leave the app stuck on the launch
+        // spinner forever — it falls through to the login screen instead.
+        final userData = await ApiService.get('/auth/me').timeout(const Duration(seconds: 8));
         _isAuthenticated = true;
         _userName = userData['name'];
         _userRole = userData['role'];
       } catch (e) {
-        // Token is invalid or expired
+        // Token is invalid/expired, or the backend didn't respond in time.
         _isAuthenticated = false;
         await prefs.remove('jwt_token');
       }

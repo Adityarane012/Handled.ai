@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
+import '../services/api_service.dart';
 import '../theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -31,7 +32,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) context.go('/');
     } catch (e) {
       setState(() {
-        _errorMessage = 'Invalid email or password. Please try again.';
+        _errorMessage = ApiService.friendlyError(e);
       });
     } finally {
       if (mounted) {

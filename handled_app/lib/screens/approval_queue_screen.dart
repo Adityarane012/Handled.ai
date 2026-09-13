@@ -119,14 +119,20 @@ class _ApprovalCardState extends State<_ApprovalCard> {
   final _amountController = TextEditingController();
   bool _isSubmitting = false;
 
+  int? get _quantity => int.tryParse(_quantityController.text.trim());
+  double? get _amount => double.tryParse(_amountController.text.trim());
+
   Future<void> _submitDecision(String decision) async {
     setState(() => _isSubmitting = true);
-    
+
     Map<String, dynamic> manualFields = {};
     if (widget.action['tool_name'] == 'purchase_order_approval' && decision == 'approved') {
+      // canApprove already gates the button on both being valid positive
+      // numbers, but the ints/doubles are re-read here (not defaulted to 0)
+      // so a bad parse can never silently become a real approval.
       manualFields = {
-        'quantity': int.tryParse(_quantityController.text) ?? 0,
-        'amount': double.tryParse(_amountController.text) ?? 0.0,
+        'quantity': _quantity!,
+        'amount': _amount!,
       };
     }
 
@@ -160,10 +166,13 @@ class _ApprovalCardState extends State<_ApprovalCard> {
     final draft = widget.action['draft_output'] ?? {};
     final isPO = widget.action['tool_name'] == 'purchase_order_approval';
     
-    // Safety check: isPO requires manual inputs before approval
+    // Safety check: isPO requires manually-typed, valid positive numbers
+    // before approval — a non-numeric or zero entry must NOT enable the
+    // button (silently defaulting to 0 would defeat the point of making
+    // the human type the real figure in).
     bool canApprove = true;
     if (isPO) {
-      canApprove = _quantityController.text.isNotEmpty && _amountController.text.isNotEmpty;
+      canApprove = (_quantity ?? 0) > 0 && (_amount ?? 0) > 0;
     }
 
     return Container(
@@ -264,7 +273,7 @@ class _ApprovalCardState extends State<_ApprovalCard> {
                 Expanded(
                   child: TextField(
                     controller: _amountController,
-                    decoration: const InputDecoration(labelText: 'Total Amount (\$)'),
+                    decoration: const InputDecoration(labelText: 'Total Amount (₹)'),
                     keyboardType: TextInputType.number,
                     onChanged: (v) => setState(() {}),
                   ),

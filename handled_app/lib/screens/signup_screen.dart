@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
+import '../services/api_service.dart';
 import '../theme.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -38,7 +39,7 @@ class _SignupScreenState extends State<SignupScreen> {
       if (mounted) context.go('/');
     } catch (e) {
       setState(() {
-        _errorMessage = 'Failed to sign up. Please check your details.';
+        _errorMessage = ApiService.friendlyError(e);
       });
     } finally {
       if (mounted) {
