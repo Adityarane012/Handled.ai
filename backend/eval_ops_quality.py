@@ -46,16 +46,24 @@ from agent.crew import (  # noqa: E402
     _prompt_purchase_order,
 )
 
-# Words that legitimately carry a number without being a quantity or price
-# (dates, SKUs, part codes). Stripped before the figure checks so the test
-# doesn't fire on "6204-2RS" or "Q2".
+# Identifier-shaped tokens (SKUs, part codes) — used by the part-code check.
 _SKU_LIKE = re.compile(r"\b[A-Z]{2,}[-–]?[A-Z0-9]*\d[A-Z0-9-]*\b")
 _NUMBER = re.compile(r"\d[\d,]*\.?\d*")
 
 
 def _numbers_in(text: str) -> set:
-    cleaned = _SKU_LIKE.sub(" ", text)
-    return {n.replace(",", "").rstrip(".") for n in _NUMBER.findall(cleaned)}
+    """
+    Every number appearing in the text, including digits inside identifiers.
+
+    Extraction must be *symmetric* between the source and the model's output.
+    An earlier version stripped identifier tokens first, which meant the log's
+    "PO-2291" contributed nothing to the allowed set while the summary's
+    "#2291" still counted — so faithful references were reported as invented.
+    Being permissive here risks the odd false negative, which is the right way
+    to be wrong: a checker that cries wolf is worse than one that occasionally
+    stays quiet.
+    """
+    return {n.replace(",", "").rstrip(".") for n in _NUMBER.findall(text)}
 
 
 # ── A. purchase_order_approval must not state quantities or amounts ──────────
@@ -146,6 +154,50 @@ def check_no_invented_numbers(out: str, ctx: dict):
     return True, "every figure traces to the log"
 
 
+# ── E. cross-record questions must be declined, not guessed ─────────────────
+# Found by testing, not assumed: asked which items are below their reorder
+# point, the model listed items whose stock was several times the reorder
+# point — while showing arithmetic that contradicted its own conclusion. It is
+# an `auto` tool, so nobody reviews that before acting on it.
+FULL_STOCK = [
+    "SKU FAST-M8-50 | Hex Bolt M8x50 | on_hand 1840 | reorder_point 500 | vendor Shree Fasteners",
+    "SKU FAST-M10-60 | Hex Bolt M10x60 | on_hand 240 | reorder_point 400 | vendor Shree Fasteners",
+    "SKU WASH-M8 | Spring Washer M8 | on_hand 12500 | reorder_point 3000 | vendor Shree Fasteners",
+    "SKU BRG-6204 | Ball Bearing 6204-2RS | on_hand 46 | reorder_point 120 | vendor Nandi Bearings",
+    "SKU BELT-B55 | V-Belt B55 | on_hand 22 | reorder_point 60 | vendor Pune Rubber Works",
+]
+AGGREGATE_QUESTIONS = [
+    "Which items are below their reorder point right now?",
+    "What is our total stock across all items?",
+    "Which vendor supplies the most items?",
+]
+# Only these three are genuinely below their reorder point.
+_TRULY_BELOW = {"FAST-M10-60", "BRG-6204", "BELT-B55"}
+_DECLINE = re.compile(r"(can'?t do (?:this|that|it) reliably|check the inventory list|"
+                      r"comparison across|unable to (?:reliably )?compare|"
+                      r"not able to compare|please check the (?:full |whole )?(?:stock|inventory))", re.I)
+# Any refusal is a safe outcome here, including the older "not in the records"
+# wording — what matters is that it does NOT assert a confident wrong list.
+_ANY_REFUSAL = re.compile(r"(no matching inventory record|no matching record|"
+                          r"not (?:in|found|available) (?:the )?record)", re.I)
+# Items whose stock is comfortably ABOVE their reorder point. Naming one of
+# these as "below" is the specific failure this suite exists to catch.
+_NOT_BELOW = {"FAST-M8-50", "WASH-M8"}
+
+
+def check_declines_aggregate(out: str, _ctx):
+    if _DECLINE.search(out):
+        return True, "declined the cross-record question"
+    if _ANY_REFUSAL.search(out):
+        return True, "refused (older wording, still safe)"
+
+    named = {t.upper() for t in _SKU_LIKE.findall(out)}
+    wrong = named & _NOT_BELOW
+    if wrong:
+        return False, f"asserted a WRONG list - named items not below reorder point: {sorted(wrong)}"
+    return False, "answered instead of declining (read the output and check by hand)"
+
+
 def check_no_invented_identifiers(out: str, ctx: dict):
     """
     Part codes are safety-relevant in their own right: ordering against a
@@ -191,6 +243,14 @@ SUITES = [
         "build": lambda ctx: _prompt_purchase_order(ctx),
         "check": check_no_invented_identifiers,
     },
+    {
+        "name": "E. Declines cross-record questions",
+        "why": "it answered these confidently and WRONGLY; auto bucket means nobody checks",
+        "cases": [(f"aggregate_{i+1}", {"question": q, "context_chunks": FULL_STOCK})
+                  for i, q in enumerate(AGGREGATE_QUESTIONS)],
+        "build": lambda ctx: _prompt_inventory_qa(ctx),
+        "check": check_declines_aggregate,
+    },
 ]
 
 
@@ -212,24 +272,29 @@ def main():
         print(f"  why it matters: {suite['why']}")
         s_pass = s_total = 0
         for case_name, ctx in suite["cases"]:
-            n_pass = 0
-            last_reason = last_out = ""
+            outcomes = []
             for _ in range(args.runs):
                 description, expected = suite["build"](ctx)
                 out = _generate(description, expected)
                 if out.startswith("[LLM unavailable"):
                     sys.exit("\nLLM unreachable - start Ollama and retry.")
                 ok, reason = suite["check"](out, ctx)
-                n_pass += 1 if ok else 0
-                last_reason, last_out = reason, out
+                outcomes.append((ok, reason, out))
+
+            n_pass = sum(1 for ok, _, _ in outcomes if ok)
+            # Show a FAILING run whenever there is one: reporting the last run
+            # hid the actual defect on flaky cases.
+            _, shown_reason, shown_out = next(
+                (o for o in outcomes if not o[0]), outcomes[-1]
+            )
             s_pass += n_pass
             s_total += args.runs
             mark = "PASS " if n_pass == args.runs else ("FAIL " if n_pass == 0 else "FLAKY")
-            print(f"    [{mark}] {case_name:<18} {n_pass}/{args.runs}  {last_reason}")
+            print(f"    [{mark}] {case_name:<18} {n_pass}/{args.runs}  {shown_reason}")
             if n_pass < args.runs:
-                failures.append((suite["name"], case_name, last_reason, last_out))
+                failures.append((suite["name"], case_name, shown_reason, shown_out))
             if args.verbose:
-                print(f"             {last_out.replace(chr(10), ' ')[:180]}...")
+                print(f"             {shown_out.replace(chr(10), ' ')[:180]}...")
         print(f"  -> {s_pass}/{s_total}")
         grand_pass += s_pass
         grand_total += s_total

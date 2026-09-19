@@ -90,19 +90,35 @@ When it returns, read one bullet aloud. Then:
 
 ## 4. Auto + RAG — grounded, and refuses to guess (75s)
 
-Ops Tools → **Inventory Q&A** → ask: *"Which items are below their reorder point?"*
+Ops Tools → **Inventory Q&A** → ask: *"How many 6204 bearings do we have on hand?"*
 
 ⏳ *While it generates:*
 > "This one is answering from a stock list this company uploaded — not from
 > general knowledge. Retrieval is per-company, so it's physically reading
 > Company A's document and nothing else."
 
-When it answers, then ask a second question it **cannot** answer:
-*"What's the unit price of the 6204 bearing?"* (prices aren't in the doc)
+It should answer **46 units**. Then ask a question the document **cannot**
+answer: *"What is the lead time from Nandi Bearings?"* (no lead times in the doc)
 
 > "Watch this — it says it doesn't have that. It would be easy to make an AI
 > that always produces a confident number. For an ops tool that's worse than
 > useless, because someone will order against it. Refusing is a feature."
+
+**Optional, if you want to make the strongest version of the point** — ask:
+*"Which items are below their reorder point?"*
+
+> "And here it refuses for a different reason. That question means comparing
+> every row against its own threshold. We tested a 3-billion-parameter model on
+> that and it produced confident, wrong lists — it named items with four times
+> the stock they needed. So the tool is instructed not to attempt it.
+>
+> That's the same principle as the approval tiers, one level down: the system
+> is explicit about what it is not allowed to do, instead of guessing and
+> hoping. We'd rather it say 'go look at the list' than hand you a wrong list."
+
+> **Only use this step if you're comfortable fielding "so it can't do much?"**
+> The answer is: it does lookups reliably and declines analysis — and knowing
+> the difference is the engineering.
 
 ---
 

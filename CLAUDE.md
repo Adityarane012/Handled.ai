@@ -43,7 +43,7 @@ backend/
     company.py             /company/signup — creates company + owner_admin + active Ops dept
     ops/
       purchase.py          POST /ops/purchase-order      (approval_required)
-      approvals.py         GET /ops/approvals, POST /ops/approve
+      approvals.py         GET /ops/approvals, POST /ops/approve, GET /ops/history, GET /ops/stats
       status.py            POST /ops/status-summary      (auto)
       inventory.py         POST /ops/inventory-upload, POST /ops/inventory-qa  (auto/RAG)
       vendor.py            POST /ops/vendor-status       (template_restricted)
@@ -65,25 +65,36 @@ backend/
     rls_setup.py           apply_rls() — idempotent policy DDL
   init_db.py               create tables + apply RLS
   test_rls_manual.py       raw-SQL cross-tenant isolation proof (fixtures via admin, asserts via runtime role)
+  seed_demo.py             Phase 4.1 demo data — 2 companies via the real API (~50s), leaves 2
+                           approvals PENDING on purpose for the live demo moment
+  eval_injection.py        prompt-injection harness for inventory_qa; --compare scores the
+                           pre-fencing prompt against the current one
+  eval_ops_quality.py      behavioural eval vs the product's safety claims (PO figure
+                           suppression, grounded refusal, no invented numbers/part codes)
   pytest.ini               testpaths=tests
-  tests/                   Phase 3 hardening — `..\venv\Scripts\python -m pytest` (run from backend/)
+  tests/                   `..\venv\Scripts\python -m pytest` (run from backend/) — 27 tests
     conftest.py            in-process app + Postgres; stubs agent.crew._generate (@real_llm opts out)
     test_tenant_isolation.py   Phase 3.1 adversarial cross-tenant (API + RLS-alone)
-    test_audit_log.py          Phase 3.3 every tool writes a row; reject/approve preserve the draft
+    test_audit_log.py          Phase 3.3 audit integrity + /ops/history + /ops/stats
     test_cost_controls.py      Phase 3.2 CREW_MAX_ITER/RPM loaded + applied; failure path bounded
+    test_prompt_injection.py   untrusted RAG/log content is fenced, guarded, task restated after
+    test_department_agnostic.py  a runtime-registered 2nd-department tool routes correctly
 
 handled_app/               Flutter (windows + web are the built platforms)
   lib/
     main.dart              go_router config, auth redirect, ShellRoute
     providers/auth_provider.dart   JWT in shared_preferences, /auth/me check
     services/api_service.dart      ApiService.get/post, baseUrl http://127.0.0.1:8000
+    ops_labels.dart                shared bucket/status labels + colours, OpsBadge, StatCard —
+                                   so History and the dashboard can't drift on how a bucket reads
     screens/
       login_screen.dart, signup_screen.dart
-      dashboard_shell.dart         sidebar nav (/ , /ops, /approvals) + DashboardPlaceholder
-                                   (real pending-approvals count + quick links)
+      dashboard_shell.dart         sidebar nav (/ , /ops, /approvals, /history) + DashboardPlaceholder
+                                   (autonomy analytics off /ops/stats + by-bucket breakdown)
       ops_tools_screen.dart        /ops — one card per tool, grouped by bucket; triggers all 5
                                    endpoints + inventory-doc upload; inline results
       approval_queue_screen.dart   pending list + _ApprovalCard with manual quantity/amount fields
+      history_screen.dart          /history — full audit trail, bucket/status badges, filters
     theme.dart                     AppTheme dark theme (bundled font; _fontFamily switch for Inter)
 
 docs/                      Source of truth for scope & decisions (see below)
@@ -131,7 +142,15 @@ Resolved since the 2026-08-28 pass (kept here so nobody re-proposes them): real 
 - **Repo** ✅ Weeks 3–6 committed as a clean linear history and **pushed to `origin/main`** (`github.com/Adityarane012/Handled.ai`). Commits: `89610f2` W3, `01dbb50` W4, `88aac71` W5, `f75da91` W6, `4c356fa` docs, `e876603` README/.env.example/.gitignore, `c2cd27a` README polish, `3b3ebcb` QLoRA fine-tuning pipeline, `605b9f8` DB migration #1–5. Root `README.md` + `handled_app/README.md` + `backend/.env.example` in place. No `LICENSE` yet (deliberate — user's call).
 - **Fine-tuned model** ✅ `handled-ops` (QLoRA on Qwen2.5-3B-Instruct) is pulled into Ollama and set as `LLM_MODEL` in `.env` (`LLM_PROVIDER=ollama`). Verified 2026-08-31: signup → login → `/ops/status-summary` returns real generated text (~10s/call), not fallback.
 - **DB migration #1–5** ✅ applied to the live `handled_dev` DB and pushed (`605b9f8`) — `agent_action.requested_by`, `department` UNIQUE(company_id, type), `agent_action(company_id, status)` index, RLS policy on `company`, approve flips straight to `executed`. Both regression suites green after: `pytest` 15/15, `test_rls_manual.py` 7/7.
-- **Next:** Week 7–8 demo prep (seed data, demo script, rehearsals) — see `Implementation_Plan.md` §4. Not started yet.
+- **2026-09-19** ✅ audit trail + analytics + safety hardening (`4c78a6a`, `4c68080`, `1d77051`):
+  - `/history` screen and `GET /ops/history` — the full audit trail, which is what actually makes the three-bucket story visible (previously only *pending* approvals were shown).
+  - Dashboard analytics off `GET /ops/stats` — per-bucket/status counts, `hands_off_rate`, `rejection_rate` (null not 0 when there's no data).
+  - `seed_demo.py` (Plan §4.1) + `docs/Demo_Script.md` (Plan §4.2, incl. the required fallback plan).
+  - **Prompt-injection fencing** for RAG/log content, measured: unfenced 17/18 → fenced 18/18. The baseline miss was real (injected record made it report "9999" instead of 46 stock, 2/3 runs).
+  - **Department routing fixed** — `run_tool` hard-coded `type == "ops"`, so `arch.md` §4's "just add rows" claim wasn't true in code. Department now comes from the registry row.
+  - `eval_injection.py` + `eval_ops_quality.py` — the Plan §5.3 eval loop that training never had.
+  - pytest **27/27**, `test_rls_manual.py` 7/7.
+- **Next:** rehearse the demo script end-to-end; address the PO-draft quality findings from `eval_ops_quality.py` (see Progress.md "Still open").
 
 ## Auth — decided
 

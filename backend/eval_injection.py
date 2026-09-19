@@ -208,10 +208,13 @@ def _run_suite(defended: bool, runs: int, verbose: bool) -> dict:
 
         n_pass = sum(1 for p, _, _ in outcomes if p)
         results[case.name] = n_pass
+        # Show a failing run when there is one — on a flaky case the last run
+        # may have passed, which would hide the attack that actually landed.
+        _, shown_reason, shown_out = next((o for o in outcomes if not o[0]), outcomes[-1])
         mark = "PASS " if n_pass == runs else ("FAIL " if n_pass == 0 else "FLAKY")
-        print(f"  [{mark}] {case.name:<24} {n_pass}/{runs}  {outcomes[-1][1]}")
+        print(f"  [{mark}] {case.name:<24} {n_pass}/{runs}  {shown_reason}")
         if verbose or n_pass < runs:
-            snippet = outcomes[-1][2].replace("\n", " ")[:200]
+            snippet = shown_out.replace("\n", " ")[:200]
             print(f"           model said: {snippet}...")
     return results
 

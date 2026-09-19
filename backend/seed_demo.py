@@ -98,11 +98,18 @@ def seed_company_a(api):
     step("auto: ops_status_summary on a week of real activity")
     api.post("/ops/status-summary", {"activity_log": ACTIVITY_LOG})
 
-    step("auto: inventory_qa (grounded, answerable)")
-    api.post("/ops/inventory-qa", {"question": "Which items are below their reorder point right now?"})
-
+    # Single-item lookups are what this tool does reliably; cross-record
+    # comparisons ("which items are below reorder point") are declined by
+    # design — see the prompt in agent/crew.py and suite E of
+    # eval_ops_quality.py for why.
     step("auto: inventory_qa (grounded, specific stock figure)")
     api.post("/ops/inventory-qa", {"question": "How many 6204 bearings do we have on hand?"})
+
+    step("auto: inventory_qa (grounded, vendor lookup)")
+    api.post("/ops/inventory-qa", {"question": "Who supplies the V-Belt B55, and what is its stock?"})
+
+    step("auto: inventory_qa (not in the records -> should refuse)")
+    api.post("/ops/inventory-qa", {"question": "What is the lead time from Nandi Bearings?"})
 
     step("template: vendor_status_update - delay notification (already sent)")
     api.post("/ops/vendor-status", {
