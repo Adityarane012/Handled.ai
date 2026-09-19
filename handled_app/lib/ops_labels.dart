@@ -71,6 +71,23 @@ class OpsBadge extends StatelessWidget {
   }
 }
 
+/// Whether a human has supplied usable figures for an approval that requires
+/// them.
+///
+/// This is the single most safety-critical rule in the UI, so it lives here as
+/// a pure function rather than inside a build method: the whole architecture
+/// rests on a human typing the real quantity and amount, and an earlier
+/// version only checked the fields were non-empty — so "abc" silently became
+/// 0 and could still be approved. Both values must parse and be greater than
+/// zero.
+bool manualFiguresAreUsable(String quantityText, String amountText) {
+  final q = int.tryParse(quantityText.trim());
+  final a = double.tryParse(amountText.trim());
+  if (q == null || a == null) return false;
+  if (!a.isFinite) return false;
+  return q > 0 && a > 0;
+}
+
 /// Renders a value that may legitimately be absent (no data yet) as "—"
 /// rather than a misleading 0%.
 String formatPercent(dynamic rate) {

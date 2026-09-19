@@ -167,14 +167,12 @@ class _ApprovalCardState extends State<_ApprovalCard> {
     final draft = widget.action['draft_output'] ?? {};
     final isPO = widget.action['tool_name'] == 'purchase_order_approval';
     
-    // Safety check: isPO requires manually-typed, valid positive numbers
-    // before approval — a non-numeric or zero entry must NOT enable the
-    // button (silently defaulting to 0 would defeat the point of making
-    // the human type the real figure in).
-    bool canApprove = true;
-    if (isPO) {
-      canApprove = (_quantity ?? 0) > 0 && (_amount ?? 0) > 0;
-    }
+    // Safety check lives in ops_labels.manualFiguresAreUsable so the rule is
+    // unit-testable rather than buried in a build method. A non-numeric or
+    // zero entry must NOT enable the button — silently treating it as 0 would
+    // defeat the point of making the human type the real figure in.
+    final canApprove = !isPO ||
+        manualFiguresAreUsable(_quantityController.text, _amountController.text);
 
     final input = (draft['input'] as Map?) ?? const {};
     final itemName = input['item_name'] ?? draft['item_name'] ?? 'Unknown item';
