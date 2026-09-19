@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../agent_text.dart';
 import '../ops_labels.dart';
 import '../theme.dart';
 
@@ -84,10 +85,7 @@ class _ActionDetailDialog extends StatelessWidget {
                     if (_agentText != null) ...[
                       _sectionLabel(context, 'What the agent produced'),
                       const SizedBox(height: 8),
-                      _panel(child: SelectableText(
-                        _agentText!,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.45),
-                      )),
+                      _panel(child: AgentText(_agentText!)),
                       const SizedBox(height: 20),
                     ],
                     if (_humanEntered.isNotEmpty) ...[

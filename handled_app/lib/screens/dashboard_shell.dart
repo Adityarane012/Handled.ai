@@ -478,11 +478,17 @@ class _BucketBreakdown extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Row(
                   children: [
+                    // Align, not just SizedBox: a bare SizedBox stretched the
+                    // pill to the full column width, so "Auto" rendered as a
+                    // long bar with the word floating at one end.
                     SizedBox(
                       width: 140,
-                      child: OpsBadge(
-                        text: kBucketLabels[r.$1] ?? r.$1,
-                        color: kBucketColors[r.$1] ?? AppTheme.textSecondary,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: OpsBadge(
+                          text: kBucketLabels[r.$1] ?? r.$1,
+                          color: kBucketColors[r.$1] ?? AppTheme.textSecondary,
+                        ),
                       ),
                     ),
                     Expanded(

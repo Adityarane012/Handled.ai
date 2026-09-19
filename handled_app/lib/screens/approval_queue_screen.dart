@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../agent_text.dart';
 import '../ops_labels.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
@@ -321,7 +322,7 @@ class _ApprovalCardState extends State<_ApprovalCard> {
                     fontWeight: FontWeight.w600, color: AppTheme.textSecondary, fontSize: 12)),
           ]),
           const SizedBox(height: 10),
-          Text(text, style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.45)),
+          AgentText(text),
         ],
       ),
     );

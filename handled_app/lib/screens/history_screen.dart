@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../agent_text.dart';
 import '../ops_labels.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
@@ -184,8 +185,10 @@ class _HistoryCard extends StatelessWidget {
   String _preview() {
     final out = (action['final_output'] ?? action['draft_output']) as Map<String, dynamic>?;
     if (out == null) return 'No output.';
-    if (out['body'] != null) return out['body'].toString();
-    if (out['agent_output'] != null) return out['agent_output'].toString();
+    // Flattened, not rendered: these rows are two lines of summary, so the
+    // markdown markers are stripped rather than shown as "**Heading**".
+    if (out['body'] != null) return plainAgentText(out['body'].toString());
+    if (out['agent_output'] != null) return plainAgentText(out['agent_output'].toString());
     if (out['error'] != null) return 'Error: ${out['error']}';
     return '—';
   }
