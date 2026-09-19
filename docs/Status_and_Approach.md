@@ -66,26 +66,35 @@ split**, so the evaluation loop `Implementation_Plan.md` §5.3 asks for never
 happened. `eval_ops_quality.py` now fills that gap with behavioural checks tied
 to the product's own safety claims rather than a generic benchmark.
 
-Measured (3 runs per case):
+Measured (3 runs per case, `handled-ops` on the laptop GPU):
 
 | Suite | Result |
 |---|---|
-| A. PO figure suppression | 8/9 |
+| A. PO figure suppression | 9/9 |
 | B. Grounded refusal | 9/9 |
 | C. No invented numbers in summaries | 3/3 |
 | D. No invented part codes | 9/9 |
+| E. Declines cross-record questions | 9/9 |
 
-Real defects, stated plainly:
+**39/39** — every case either answered correctly or refused safely. Treat that
+as "no unsafe output observed in 39 checks", not as "the model is safe": 39 is
+a small sample, and earlier runs did surface the defects below.
+
+Real defects seen in earlier runs — intermittent, so a clean sweep doesn't mean
+they're gone:
 - **Invented a threshold.** A PO draft asserted stock had "fallen below the
   threshold of 200 units" when the request never mentioned a threshold.
-- **A wrong part code**, seen once in ~12 drafts (`V-Belt B55` → `B52`); not
-  reproduced in 9 targeted runs. Low frequency, non-zero.
+- **A wrong part code**, twice across ~20 drafts (`V-Belt B55` → `B52`). On an
+  approved purchase order a mistyped SKU is a real wrong order.
 
-> A caution about this harness: two earlier "failures" were bugs in my own
-> checkers (a regex that flagged the model for correctly *restating* an input
-> figure, and asymmetric number extraction that flagged faithful PO references).
-> Before treating a number here as a model defect, read the failing output. The
-> harness prints it for exactly that reason.
+> **A caution about this harness — read failures before believing them.** Four
+> apparent "model defects" this session were bugs in my own checkers: a regex
+> that flagged the model for correctly *restating* an input figure; asymmetric
+> number extraction that flagged faithful PO references; and twice, a refusal
+> detector that scored a perfectly safe refusal as a failure because the model
+> had phrased it a new way. The harness prints the failing output for exactly
+> this reason. A checker that cries wolf is worse than one that occasionally
+> stays quiet.
 
 **The one hard limit — cross-record questions.** Asked "which items are below
 their reorder point", the model returned confident, *wrong* lists — naming
