@@ -59,9 +59,12 @@ class _SignupScreenState extends State<SignupScreen> {
       });
       if (mounted) context.go('/');
     } catch (e) {
-      setState(() {
-        _errorMessage = ApiService.friendlyError(e);
-      });
+      // Guarded like the finally below: the await can outlive this screen.
+      if (mounted) {
+        setState(() {
+          _errorMessage = ApiService.friendlyError(e);
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {

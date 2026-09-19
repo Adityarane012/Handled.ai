@@ -31,9 +31,12 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       if (mounted) context.go('/');
     } catch (e) {
-      setState(() {
-        _errorMessage = ApiService.friendlyError(e);
-      });
+      // Guarded like the finally below: the await can outlive this screen.
+      if (mounted) {
+        setState(() {
+          _errorMessage = ApiService.friendlyError(e);
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -76,6 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
               if (_errorMessage != null)
                 Container(
+                  key: const Key('login-error'),
                   padding: const EdgeInsets.all(12),
                   margin: const EdgeInsets.only(bottom: 24),
                   decoration: BoxDecoration(
