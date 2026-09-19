@@ -3,7 +3,7 @@ import '../services/api_service.dart';
 import '../theme.dart';
 
 class ApprovalQueueScreen extends StatefulWidget {
-  const ApprovalQueueScreen({Key? key}) : super(key: key);
+  const ApprovalQueueScreen({super.key});
 
   @override
   State<ApprovalQueueScreen> createState() => _ApprovalQueueScreenState();
@@ -67,7 +67,7 @@ class _ApprovalQueueScreenState extends State<ApprovalQueueScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.check_circle_outline, color: AppTheme.textSecondary.withOpacity(0.5), size: 64),
+            Icon(Icons.check_circle_outline, color: AppTheme.textSecondary.withValues(alpha: 0.5), size: 64),
             const SizedBox(height: 24),
             Text('All caught up', style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 24)),
             const SizedBox(height: 8),
@@ -108,7 +108,7 @@ class _ApprovalCard extends StatefulWidget {
   final Map<String, dynamic> action;
   final VoidCallback onResolved;
 
-  const _ApprovalCard({Key? key, required this.action, required this.onResolved}) : super(key: key);
+  const _ApprovalCard({required this.action, required this.onResolved});
 
   @override
   State<_ApprovalCard> createState() => _ApprovalCardState();
@@ -190,7 +190,7 @@ class _ApprovalCardState extends State<_ApprovalCard> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
+                  color: Colors.orange.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(

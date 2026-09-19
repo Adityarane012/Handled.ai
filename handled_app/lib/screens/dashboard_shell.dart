@@ -9,7 +9,7 @@ import '../theme.dart';
 class DashboardShell extends StatelessWidget {
   final Widget child;
 
-  const DashboardShell({Key? key, required this.child}) : super(key: key);
+  const DashboardShell({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +38,7 @@ class DashboardShell extends StatelessWidget {
                         width: 32,
                         height: 32,
                         decoration: BoxDecoration(
-                          color: AppTheme.primaryAction.withOpacity(0.2),
+                          color: AppTheme.primaryAction.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(

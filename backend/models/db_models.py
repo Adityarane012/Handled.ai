@@ -100,3 +100,14 @@ class AgentAction(Base):
     department = relationship("Department", back_populates="actions")
     requester = relationship("AppUser", foreign_keys=[requested_by])
     approver = relationship("AppUser", foreign_keys=[approved_by])
+
+    # An audit trail that reads as UUIDs isn't much of an audit trail. These
+    # surface the names for the API response; callers that return many rows
+    # should joinedload(requester, approver) to avoid an N+1.
+    @property
+    def requested_by_name(self) -> str | None:
+        return self.requester.name if self.requester else None
+
+    @property
+    def approved_by_name(self) -> str | None:
+        return self.approver.name if self.approver else None

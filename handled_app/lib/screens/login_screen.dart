@@ -6,7 +6,7 @@ import '../services/api_service.dart';
 import '../theme.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -79,9 +79,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   padding: const EdgeInsets.all(12),
                   margin: const EdgeInsets.only(bottom: 24),
                   decoration: BoxDecoration(
-                    color: Colors.redAccent.withOpacity(0.1),
+                    color: Colors.redAccent.withValues(alpha: 0.1),
                     border: Border.all(
-                      color: Colors.redAccent.withOpacity(0.5),
+                      color: Colors.redAccent.withValues(alpha: 0.5),
                     ),
                     borderRadius: BorderRadius.circular(6),
                   ),

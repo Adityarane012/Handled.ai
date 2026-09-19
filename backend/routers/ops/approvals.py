@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, timezone
 
 from db.session import get_db
@@ -71,9 +71,16 @@ def list_action_history(db: Session = Depends(get_db), ctx=Depends(get_tenant_ct
     automatically, what went out under a template, and what a human
     approved/rejected.
     """
-    actions = db.query(AgentAction).filter(
-        AgentAction.company_id == ctx.company_id
-    ).order_by(AgentAction.created_at.desc()).limit(limit).all()
+    # joinedload so rendering "requested by / approved by" names doesn't fire
+    # a query per row.
+    actions = (
+        db.query(AgentAction)
+        .options(joinedload(AgentAction.requester), joinedload(AgentAction.approver))
+        .filter(AgentAction.company_id == ctx.company_id)
+        .order_by(AgentAction.created_at.desc())
+        .limit(limit)
+        .all()
+    )
 
     return actions
 

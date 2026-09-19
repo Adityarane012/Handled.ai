@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../ops_labels.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
+import 'action_detail.dart';
 
 /// Full audit trail — every action the agent has taken or drafted, across
 /// all three autonomy buckets. This is the screen that makes the tiered-
@@ -148,19 +149,12 @@ class _FilterBar extends StatelessWidget {
   }
 }
 
-class _HistoryCard extends StatefulWidget {
+class _HistoryCard extends StatelessWidget {
   final Map<String, dynamic> action;
   const _HistoryCard({required this.action});
 
-  @override
-  State<_HistoryCard> createState() => _HistoryCardState();
-}
-
-class _HistoryCardState extends State<_HistoryCard> {
-  bool _expanded = false;
-
   String _preview() {
-    final out = (widget.action['final_output'] ?? widget.action['draft_output']) as Map<String, dynamic>?;
+    final out = (action['final_output'] ?? action['draft_output']) as Map<String, dynamic>?;
     if (out == null) return 'No output.';
     if (out['body'] != null) return out['body'].toString();
     if (out['agent_output'] != null) return out['agent_output'].toString();
@@ -170,13 +164,18 @@ class _HistoryCardState extends State<_HistoryCard> {
 
   @override
   Widget build(BuildContext context) {
-    final toolName = widget.action['tool_name'] as String? ?? '';
-    final bucket = widget.action['action_type'] as String? ?? '';
-    final status = widget.action['status'] as String? ?? '';
-    final createdAt = widget.action['created_at']?.toString();
+    final toolName = action['tool_name'] as String? ?? '';
+    final bucket = action['action_type'] as String? ?? '';
+    final status = action['status'] as String? ?? '';
+    final createdAt = action['created_at']?.toString();
+    final approvedByName = action['approved_by_name'] as String?;
     final preview = _preview();
 
-    return Container(
+    return InkWell(
+      onTap: () => showActionDetail(context, action),
+      borderRadius: BorderRadius.circular(8),
+      hoverColor: AppTheme.surfaceHighlight.withValues(alpha: 0.4),
+      child: Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppTheme.surface,
@@ -206,18 +205,33 @@ class _HistoryCardState extends State<_HistoryCard> {
           Text(
             preview,
             style: Theme.of(context).textTheme.bodyMedium,
-            maxLines: _expanded ? null : 2,
-            overflow: _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
-          if (preview.length > 120)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: () => setState(() => _expanded = !_expanded),
-                child: Text(_expanded ? 'Show less' : 'Show more'),
-              ),
-            ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              if (approvedByName != null)
+                Expanded(
+                  child: Text(
+                    '${status == 'rejected' ? 'Rejected' : 'Approved'} by $approvedByName',
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                )
+              else
+                const Spacer(),
+              Text('View full record',
+                  style: TextStyle(
+                      color: AppTheme.primaryAction.withValues(alpha: 0.9),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(width: 4),
+              Icon(Icons.arrow_forward, size: 12, color: AppTheme.primaryAction.withValues(alpha: 0.9)),
+            ],
+          ),
         ],
+      ),
       ),
     );
   }

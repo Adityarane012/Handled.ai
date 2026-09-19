@@ -51,6 +51,8 @@ class AgentActionResponse(BaseModel):
     final_output: Optional[Any] = None
     requested_by: Optional[UUID] = None
     approved_by: Optional[UUID] = None
+    requested_by_name: Optional[str] = None
+    approved_by_name: Optional[str] = None
     approved_at: Optional[datetime] = None
     created_at: datetime
 
