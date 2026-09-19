@@ -78,6 +78,22 @@ class ApiService {
         final body = jsonDecode(match.group(1)!);
         final detail = body is Map ? body['detail'] : null;
         if (detail is String) return detail;
+        // FastAPI validation failures (422) return a *list* of field errors,
+        // not a string. Left unhandled these reached the user as raw JSON,
+        // which is how a too-short password looked like a crash.
+        if (detail is List) {
+          final parts = <String>[];
+          for (final item in detail) {
+            if (item is! Map) continue;
+            final loc = item['loc'];
+            final field = (loc is List && loc.length > 1)
+                ? loc.last.toString().replaceAll('_', ' ')
+                : null;
+            final why = (item['msg'] ?? '').toString().replaceFirst('Value error, ', '');
+            parts.add(field == null ? why : '$field: $why');
+          }
+          if (parts.isNotEmpty) return parts.join('\n');
+        }
       } catch (_) {
         // response body wasn't JSON — fall through to the raw message
       }

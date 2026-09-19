@@ -20,31 +20,49 @@ void main() {
   );
 }
 
-class HandledApp extends StatelessWidget {
+class HandledApp extends StatefulWidget {
   const HandledApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
+  State<HandledApp> createState() => _HandledAppState();
+}
 
-    final router = GoRouter(
+class _HandledAppState extends State<HandledApp> {
+  late final GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+    final auth = context.read<AuthProvider>();
+
+    // Built once, not per build. Previously a new GoRouter was constructed on
+    // every rebuild, and while the initial auth check was in flight the app
+    // returned a plain MaterialApp with no route table at all — so on web,
+    // opening any URL other than "/" (a bookmarked /history, or a browser
+    // that remembered /login) threw "no corresponding route" on startup and
+    // silently dumped the user at "/". The splash route below keeps a single
+    // router alive for the whole lifetime instead.
+    _router = GoRouter(
       initialLocation: '/',
+      refreshListenable: auth, // re-evaluate redirects when auth state changes
       redirect: (context, state) {
-        final isAuth = authProvider.isAuthenticated;
-        final isGoingToLogin = state.matchedLocation == '/login';
-        final isGoingToSignup = state.matchedLocation == '/signup';
+        final loc = state.matchedLocation;
 
-        if (authProvider.isLoading) return null; // Wait for initial check
+        if (auth.isLoading) return loc == '/splash' ? null : '/splash';
+        if (loc == '/splash') return auth.isAuthenticated ? '/' : '/login';
 
-        if (!isAuth && !isGoingToLogin && !isGoingToSignup) {
-          return '/login';
-        }
-        if (isAuth && (isGoingToLogin || isGoingToSignup)) {
-          return '/';
-        }
+        final onAuthScreen = loc == '/login' || loc == '/signup';
+        if (!auth.isAuthenticated && !onAuthScreen) return '/login';
+        if (auth.isAuthenticated && onAuthScreen) return '/';
         return null;
       },
       routes: [
+        GoRoute(
+          path: '/splash',
+          builder: (context, state) => const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          ),
+        ),
         GoRoute(
           path: '/login',
           builder: (context, state) => const LoginScreen(),
@@ -76,18 +94,14 @@ class HandledApp extends StatelessWidget {
         ),
       ],
     );
+  }
 
-    if (authProvider.isLoading) {
-      return MaterialApp(
-        theme: AppTheme.darkTheme,
-        home: const Scaffold(body: Center(child: CircularProgressIndicator())),
-      );
-    }
-
+  @override
+  Widget build(BuildContext context) {
     return MaterialApp.router(
       title: 'Handled.ai',
       theme: AppTheme.darkTheme,
-      routerConfig: router,
+      routerConfig: _router,
       debugShowCheckedModeBanner: false,
     );
   }

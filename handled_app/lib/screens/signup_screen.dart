@@ -22,7 +22,28 @@ class _SignupScreenState extends State<SignupScreen> {
   String? _errorMessage;
   bool _isSigningUp = false;
 
+  /// Checked before sending. The backend enforces these too (Pydantic), but a
+  /// 422 round-trip is a poor way to learn the password was too short — and
+  /// that is exactly how it used to surface.
+  String? _validate() {
+    if (_companyNameController.text.trim().isEmpty) return 'Company name is required.';
+    if (_ownerNameController.text.trim().isEmpty) return 'Your full name is required.';
+    final email = _emailController.text.trim();
+    if (email.isEmpty) return 'Work email is required.';
+    if (!email.contains('@') || !email.contains('.')) return "That doesn't look like an email address.";
+    if (_passwordController.text.length < 8) {
+      return 'Password must be at least 8 characters.';
+    }
+    return null;
+  }
+
   void _handleSignup() async {
+    final problem = _validate();
+    if (problem != null) {
+      setState(() => _errorMessage = problem);
+      return;
+    }
+
     setState(() {
       _errorMessage = null;
       _isSigningUp = true;
@@ -139,8 +160,13 @@ class _SignupScreenState extends State<SignupScreen> {
                 const SizedBox(height: 16),
                 TextField(
                   controller: _passwordController,
-                  decoration: const InputDecoration(labelText: 'Password'),
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    helperText: 'At least 8 characters',
+                    helperStyle: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                  ),
                   obscureText: true,
+                  onSubmitted: (_) => _isSigningUp ? null : _handleSignup(),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(

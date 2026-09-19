@@ -104,6 +104,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 controller: _passwordController,
                 decoration: const InputDecoration(labelText: 'Password'),
                 obscureText: true,
+                onSubmitted: (_) => _isLoggingIn ? null : _handleLogin(),
               ),
               const SizedBox(height: 24),
               ElevatedButton(
