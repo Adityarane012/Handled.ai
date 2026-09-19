@@ -14,6 +14,33 @@ def _rows(admin_conn, company_id):
     ), {"c": company_id}).fetchall()
 
 
+def test_history_returns_every_bucket_and_status(client, make_company, admin_conn):
+    co = make_company()
+    H = co["headers"]
+
+    client.post("/ops/status-summary", json={}, headers=H)  # auto
+    client.post("/ops/vendor-status", json={                 # template_restricted
+        "vendor_name": "Acme", "template_key": "delivery_confirmed_v1",
+        "details": {"vendor_name": "Acme", "order_ref": "1", "delivery_date": "2026-09-01", "company_name": "Co"},
+    }, headers=H)
+    pid = client.post("/ops/purchase-order",                 # approval_required
+                       json={"item_name": "Bolt", "current_stock": 2}, headers=H).json()["id"]
+    client.post("/ops/approve", json={
+        "action_id": pid, "decision": "approved",
+        "manual_fields": {"quantity": 5, "amount": 999.0},
+    }, headers=H)
+
+    history = client.get("/ops/history", headers=H).json()
+    tools = {row["tool_name"] for row in history}
+    assert tools == {"ops_status_summary", "vendor_status_update", "purchase_order_approval"}
+    statuses = {row["tool_name"]: row["status"] for row in history}
+    assert statuses["ops_status_summary"] == "auto_executed"
+    assert statuses["vendor_status_update"] == "auto_executed"
+    assert statuses["purchase_order_approval"] == "executed"
+    # newest first
+    assert history == sorted(history, key=lambda r: r["created_at"], reverse=True)
+
+
 def test_every_tool_writes_one_agent_action_row(client, make_company, admin_conn):
     co = make_company()
     H = co["headers"]

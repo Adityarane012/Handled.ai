@@ -64,6 +64,7 @@ class DashboardShell extends StatelessWidget {
                 _buildNavItem(context, icon: Icons.dashboard_outlined, label: 'Overview', route: '/'),
                 _buildNavItem(context, icon: Icons.bolt_outlined, label: 'Ops Tools', route: '/ops'),
                 _buildNavItem(context, icon: Icons.pending_actions_outlined, label: 'Approvals', route: '/approvals'),
+                _buildNavItem(context, icon: Icons.history_outlined, label: 'History', route: '/history'),
 
                 const Spacer(),
 
@@ -240,6 +241,11 @@ class _DashboardPlaceholderState extends State<DashboardPlaceholder> {
               onPressed: () => context.go('/approvals'),
               icon: const Icon(Icons.pending_actions_outlined, size: 18),
               label: const Text('Review approvals'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => context.go('/history'),
+              icon: const Icon(Icons.history_outlined, size: 18),
+              label: const Text('View history'),
             ),
           ]),
         ],

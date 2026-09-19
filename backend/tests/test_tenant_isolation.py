@@ -32,6 +32,18 @@ def test_company_b_cannot_see_company_a_approvals(client, make_company):
     assert any(row["id"] == a_action for row in a_list.json())
 
 
+def test_company_b_cannot_see_company_a_history(client, make_company):
+    a, b = make_company("A"), make_company("B")
+    a_action = _make_po(client, a)
+
+    b_history = client.get("/ops/history", headers=b["headers"])
+    assert b_history.status_code == 200
+    assert all(row["id"] != a_action for row in b_history.json())
+
+    a_history = client.get("/ops/history", headers=a["headers"])
+    assert any(row["id"] == a_action for row in a_history.json())
+
+
 def test_company_b_cannot_approve_company_a_action(client, make_company):
     a, b = make_company("A"), make_company("B")
     a_action = _make_po(client, a)

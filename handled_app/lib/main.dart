@@ -9,6 +9,7 @@ import 'screens/signup_screen.dart';
 import 'screens/dashboard_shell.dart';
 import 'screens/approval_queue_screen.dart';
 import 'screens/ops_tools_screen.dart';
+import 'screens/history_screen.dart';
 
 void main() {
   runApp(
@@ -66,6 +67,10 @@ class HandledApp extends StatelessWidget {
             GoRoute(
               path: '/approvals',
               builder: (context, state) => const ApprovalQueueScreen(),
+            ),
+            GoRoute(
+              path: '/history',
+              builder: (context, state) => const HistoryScreen(),
             ),
           ],
         ),

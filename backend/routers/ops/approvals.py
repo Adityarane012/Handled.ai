@@ -9,6 +9,21 @@ from models.db_models import AgentAction
 
 router = APIRouter()
 
+@router.get("/history", response_model=list[AgentActionResponse])
+def list_action_history(db: Session = Depends(get_db), ctx=Depends(get_tenant_ctx), limit: int = 200):
+    """
+    Full audit trail for the current company — every agent_action row
+    regardless of bucket or status, newest first. Unlike /approvals (pending
+    only), this is what makes the tiered-autonomy story visible: what ran
+    automatically, what went out under a template, and what a human
+    approved/rejected.
+    """
+    actions = db.query(AgentAction).filter(
+        AgentAction.company_id == ctx.company_id
+    ).order_by(AgentAction.created_at.desc()).limit(limit).all()
+
+    return actions
+
 @router.get("/approvals", response_model=list[AgentActionResponse])
 def list_pending_approvals(db: Session = Depends(get_db), ctx=Depends(get_tenant_ctx)):
     """List all actions pending approval for the current company."""
