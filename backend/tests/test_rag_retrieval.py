@@ -44,26 +44,24 @@ def test_line_oriented_doc_is_not_packed_into_mega_chunks():
     assert worst <= 2, f"a chunk holds {worst} SKUs — embeddings will be diluted"
 
 
-def test_small_document_is_returned_whole(company):
-    """
-    An SME stock list fits in context, so aggregate questions shouldn't be
-    starved of rows by per-record similarity matching.
-    """
-    rag.index_inventory_document(company, INVENTORY, "test")
-    got = rag.retrieve_inventory_chunks(company, "which items are below their reorder point?")
-    joined = "\n".join(got)
-    for sku in ["FAST-M8-50", "FAST-M10-60", "WASH-M8", "BRG-6204", "BELT-B55"]:
-        assert sku in joined, f"{sku} missing from a whole-document return"
-
-
 def test_specific_lookup_retrieves_the_right_record(company):
     rag.index_inventory_document(company, INVENTORY, "test")
     got = rag.retrieve_inventory_chunks(company, "How many 6204 bearings do we have?")
     assert any("BRG-6204" in c for c in got)
 
 
-def test_large_document_falls_back_to_semantic_retrieval(company):
-    """Past the full-document threshold, retrieval must narrow rather than dump."""
+def test_retrieval_stays_narrow(company):
+    """
+    Context is kept small deliberately. Handing this model the whole stock list
+    measurably cost recall on named-part lookups (17/17 correct with 3 rows in
+    context, 8/11 with 9-10), so retrieval must narrow rather than dump.
+    """
+    rag.index_inventory_document(company, INVENTORY, "test")
+    got = rag.retrieve_inventory_chunks(company, "How many 6204 bearings do we have?")
+    assert 0 < len(got) <= 4, f"expected a narrowed result set, got {len(got)}"
+
+
+def test_large_document_also_narrows(company):
     big = "".join(
         f"SKU ITEM-{i:04d} | Component number {i} | on_hand {i} | reorder_point 50 | vendor V{i % 7}\n"
         for i in range(300)

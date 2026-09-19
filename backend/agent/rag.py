@@ -81,46 +81,28 @@ def index_inventory_document(company_id: str, doc_text: str, source: str = "uplo
 # closer; a match past MAX_DISTANCE is treated as noise, not a real hit.
 _MAX_DISTANCE = float(os.environ.get("RAG_MAX_DISTANCE", "1.1"))
 
-# Below this total size, the whole inventory is handed to the model instead of
-# being retrieved over. This is a deliberate fit to the target user: an SME
-# with 10-100 staff keeps a stock list of dozens of rows, not millions, and it
-# comfortably fits the context window.
+# Retrieval stays narrow on purpose. Handing the model the whole (small) stock
+# list was tried, to make aggregate questions like "which items are below their
+# reorder point" answerable — but measured against this model it cost recall on
+# the lookups that actually work: asked for a named part with 3 rows in context
+# the answer was right 17/17, with 9-10 rows 8/11, the failures being false
+# "no matching inventory record" on a record that was demonstrably present.
 #
-# It also fixes a real failure. Semantic retrieval matches a question against
-# individual records, so it handles "how many 6204 bearings?" well but not
-# aggregate questions like "which items are below their reorder point?" — that
-# question isn't *about* any one row, so it sits just past the cutoff and the
-# tool wrongly answered "no matching inventory record". Widening the cutoff
-# would have fixed it only by also admitting noise for questions the document
-# genuinely can't answer, which would break the refusal behaviour. Passing the
-# whole small document sidesteps the tradeoff entirely.
-_FULL_DOC_MAX_CHARS = int(os.environ.get("RAG_FULL_DOC_MAX_CHARS", "2500"))
+# And the aggregate case it was meant to serve is moot: the model produces
+# confidently wrong lists when it attempts those, so the prompt now declines
+# them outright (see _prompt_inventory_qa). Narrow retrieval it is.
 
 
 def retrieve_inventory_chunks(company_id: str, question: str, k: int = 4) -> List[str]:
     """
-    Return the inventory passages the question should be answered from.
+    Return up to k inventory passages relevant to the question.
 
-    Small documents are returned whole (see _FULL_DOC_MAX_CHARS) so aggregate
-    questions work. Larger ones fall back to semantic retrieval, dropping
-    matches beyond _MAX_DISTANCE so "no matching record" doesn't rest on the
-    prompt alone. Empty list means nothing relevant was found.
+    Matches beyond _MAX_DISTANCE are dropped, so "no matching record" doesn't
+    rest on the prompt alone. An empty list means nothing relevant was found.
     """
     col = _collection(company_id)
     if col.count() == 0:
         return []
-
-    everything = col.get()
-    all_docs = [d for d in (everything.get("documents") or []) if d]
-    if all_docs and sum(len(d) for d in all_docs) <= _FULL_DOC_MAX_CHARS:
-        # Preserve the document's original row order — inventory lists read as
-        # a table, and shuffling rows makes the model's answer harder to check.
-        metas = everything.get("metadatas") or [{}] * len(all_docs)
-        ordered = sorted(
-            zip(all_docs, metas),
-            key=lambda pair: (pair[1] or {}).get("chunk", 0),
-        )
-        return [d for d, _ in ordered]
 
     res = col.query(
         query_texts=[question],
