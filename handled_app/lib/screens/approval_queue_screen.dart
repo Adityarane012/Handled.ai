@@ -118,10 +118,19 @@ class _ApprovalCard extends StatefulWidget {
 class _ApprovalCardState extends State<_ApprovalCard> {
   final _quantityController = TextEditingController();
   final _amountController = TextEditingController();
+  final _noteController = TextEditingController();
   bool _isSubmitting = false;
 
   int? get _quantity => int.tryParse(_quantityController.text.trim());
   double? get _amount => double.tryParse(_amountController.text.trim());
+
+  @override
+  void dispose() {
+    _quantityController.dispose();
+    _amountController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
 
   Future<void> _submitDecision(String decision) async {
     setState(() => _isSubmitting = true);
@@ -141,7 +150,8 @@ class _ApprovalCardState extends State<_ApprovalCard> {
       await ApiService.post('/ops/approve', {
         'action_id': widget.action['id'],
         'decision': decision,
-        'manual_fields': manualFields
+        'manual_fields': manualFields,
+        'note': _noteController.text,
       });
       widget.onResolved();
     } catch (e) {
@@ -228,6 +238,16 @@ class _ApprovalCardState extends State<_ApprovalCard> {
             const SizedBox(height: 20),
             _manualEntryBlock(context),
           ],
+
+          const SizedBox(height: 16),
+          TextField(
+            controller: _noteController,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Reason for your decision (optional)',
+              hintText: 'e.g. vendor not approved this quarter — reorder from Nandi instead',
+            ),
+          ),
 
           const SizedBox(height: 20),
           if (isPO && canApprove) ...[

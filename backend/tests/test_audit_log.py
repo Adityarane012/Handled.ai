@@ -14,6 +14,57 @@ def _rows(admin_conn, company_id):
     ), {"c": company_id}).fetchall()
 
 
+def test_decision_note_is_recorded_for_both_outcomes(client, make_company):
+    """
+    "Rejected" alone is a weak audit record. The reason the human gave is kept
+    permanently alongside the action, for approvals as well as rejections.
+    """
+    co = make_company()
+    H = co["headers"]
+
+    rejected = client.post("/ops/purchase-order",
+                           json={"item_name": "Bolt", "current_stock": 2}, headers=H).json()["id"]
+    client.post("/ops/approve", json={
+        "action_id": rejected, "decision": "rejected",
+        "note": "  Vendor not approved this quarter - use Nandi instead.  ",
+    }, headers=H)
+
+    approved = client.post("/ops/purchase-order",
+                           json={"item_name": "Nut", "current_stock": 1}, headers=H).json()["id"]
+    client.post("/ops/approve", json={
+        "action_id": approved, "decision": "approved",
+        "manual_fields": {"quantity": 10, "amount": 500.0},
+        "note": "Price confirmed by phone.",
+    }, headers=H)
+
+    by_id = {r["id"]: r for r in client.get("/ops/history", headers=H).json()}
+    # Stored trimmed, and reaches the client that renders the trail.
+    assert by_id[rejected]["decision_note"] == "Vendor not approved this quarter - use Nandi instead."
+    assert by_id[approved]["decision_note"] == "Price confirmed by phone."
+
+
+def test_decision_note_is_optional_and_blank_is_not_stored(client, make_company):
+    """A decision is never blocked on writing a note — it just stays null."""
+    co = make_company()
+    H = co["headers"]
+
+    no_note = client.post("/ops/purchase-order",
+                          json={"item_name": "Washer", "current_stock": 4}, headers=H).json()["id"]
+    r = client.post("/ops/approve", json={"action_id": no_note, "decision": "rejected"}, headers=H)
+    assert r.status_code == 200
+
+    blank = client.post("/ops/purchase-order",
+                        json={"item_name": "Gasket", "current_stock": 4}, headers=H).json()["id"]
+    client.post("/ops/approve", json={
+        "action_id": blank, "decision": "rejected", "note": "   ",
+    }, headers=H)
+
+    by_id = {r["id"]: r for r in client.get("/ops/history", headers=H).json()}
+    assert by_id[no_note]["decision_note"] is None
+    # Whitespace-only is not a reason; don't pretend one was given.
+    assert by_id[blank]["decision_note"] is None
+
+
 def test_stats_counts_buckets_and_decision_rates(client, make_company):
     co = make_company()
     H = co["headers"]

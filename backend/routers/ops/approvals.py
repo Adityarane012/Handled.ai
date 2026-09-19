@@ -132,8 +132,12 @@ def approve_action(payload: ApprovalRequest, db: Session = Depends(get_db), ctx=
             
     elif payload.decision == "rejected":
         action.status = "rejected"
-        
+
     action.approved_by = ctx.user_id
+    # Recorded for both outcomes, not just rejections — "approved because the
+    # vendor confirmed the price" is worth keeping too.
+    if payload.note and payload.note.strip():
+        action.decision_note = payload.note.strip()
     action.approved_at = datetime.utcnow()
     
     db.commit()

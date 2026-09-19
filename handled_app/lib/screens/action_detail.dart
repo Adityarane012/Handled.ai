@@ -245,6 +245,10 @@ class _ActionDetailDialog extends StatelessWidget {
         if (_status == 'pending_approval')
           _trailRow(Icons.hourglass_empty, 'Waiting', 'No human has decided yet',
               colour: Colors.orange),
+        if ((action['decision_note'] as String?)?.trim().isNotEmpty ?? false) ...[
+          const SizedBox(height: 4),
+          _trailRow(Icons.notes_outlined, 'Reason', action['decision_note'].toString()),
+        ],
       ],
     );
   }

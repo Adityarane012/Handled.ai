@@ -80,6 +80,10 @@ class AgentAction(Base):
     final_output = Column(JSONB)
     requested_by = Column(UUID(as_uuid=True), ForeignKey("app_user.id"))
     approved_by = Column(UUID(as_uuid=True), ForeignKey("app_user.id"))
+    # Why the human decided what they decided. Optional, but the audit trail
+    # is much weaker without it: "this PO was rejected" is far less use six
+    # months later than "rejected — vendor unapproved, use Nandi instead".
+    decision_note = Column(Text)
     approved_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
