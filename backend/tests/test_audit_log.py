@@ -14,6 +14,45 @@ def _rows(admin_conn, company_id):
     ), {"c": company_id}).fetchall()
 
 
+def test_stats_counts_buckets_and_decision_rates(client, make_company):
+    co = make_company()
+    H = co["headers"]
+
+    client.post("/ops/status-summary", json={}, headers=H)   # auto
+    client.post("/ops/vendor-status", json={                  # template_restricted
+        "vendor_name": "Acme", "template_key": "delivery_confirmed_v1",
+        "details": {"vendor_name": "Acme", "order_ref": "1", "delivery_date": "2026-09-01", "company_name": "Co"},
+    }, headers=H)
+    approved = client.post("/ops/purchase-order",             # approval -> approved
+                           json={"item_name": "Bolt", "current_stock": 2}, headers=H).json()["id"]
+    client.post("/ops/approve", json={
+        "action_id": approved, "decision": "approved",
+        "manual_fields": {"quantity": 5, "amount": 100.0},
+    }, headers=H)
+    rejected = client.post("/ops/workflow-exception",         # approval -> rejected
+                           json={"request_description": "x", "justification": "y"}, headers=H).json()["id"]
+    client.post("/ops/approve", json={"action_id": rejected, "decision": "rejected"}, headers=H)
+    client.post("/ops/purchase-order",                        # approval -> left pending
+                json={"item_name": "Nut", "current_stock": 1}, headers=H)
+
+    s = client.get("/ops/stats", headers=H).json()
+    assert s["total_actions"] == 5
+    assert s["by_bucket"] == {"auto": 1, "template_restricted": 1, "approval_required": 3}
+    assert s["approved"] == 1 and s["rejected"] == 1 and s["pending_approval"] == 1
+    # 2 of 5 actions never needed a human
+    assert s["hands_off_rate"] == 0.4
+    # of the 2 decisions actually made, 1 was a rejection
+    assert s["rejection_rate"] == 0.5
+
+
+def test_stats_are_null_not_zero_when_there_is_no_data(client, make_company):
+    """A fresh company should read '—', not a misleading 0%."""
+    s = client.get("/ops/stats", headers=make_company()["headers"]).json()
+    assert s["total_actions"] == 0
+    assert s["hands_off_rate"] is None
+    assert s["rejection_rate"] is None
+
+
 def test_history_returns_every_bucket_and_status(client, make_company, admin_conn):
     co = make_company()
     H = co["headers"]

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../ops_labels.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
 
@@ -147,42 +148,6 @@ class _FilterBar extends StatelessWidget {
   }
 }
 
-const _toolLabels = {
-  'ops_status_summary': 'Status Summary',
-  'inventory_qa': 'Inventory Q&A',
-  'vendor_status_update': 'Vendor Status Update',
-  'purchase_order_approval': 'Purchase Order',
-  'workflow_exception_approval': 'Workflow Exception',
-};
-
-const _bucketLabels = {
-  'auto': 'Auto',
-  'template_restricted': 'Template',
-  'approval_required': 'Approval Required',
-};
-
-const _bucketColors = {
-  'auto': Color(0xFF5E9EFF),
-  'template_restricted': Color(0xFFB07CF2),
-  'approval_required': Colors.orange,
-};
-
-const _statusLabels = {
-  'auto_executed': 'Ran automatically',
-  'pending_approval': 'Pending approval',
-  'executed': 'Approved & executed',
-  'rejected': 'Rejected',
-  'drafted': 'Drafted — missing info',
-};
-
-const _statusColors = {
-  'auto_executed': Colors.lightGreenAccent,
-  'pending_approval': Colors.orange,
-  'executed': Colors.lightGreenAccent,
-  'rejected': Colors.redAccent,
-  'drafted': Colors.amber,
-};
-
 class _HistoryCard extends StatefulWidget {
   final Map<String, dynamic> action;
   const _HistoryCard({required this.action});
@@ -223,9 +188,9 @@ class _HistoryCardState extends State<_HistoryCard> {
         children: [
           Row(
             children: [
-              _Badge(text: _bucketLabels[bucket] ?? bucket, color: _bucketColors[bucket] ?? AppTheme.textSecondary),
+              OpsBadge(text: kBucketLabels[bucket] ?? bucket, color: kBucketColors[bucket] ?? AppTheme.textSecondary),
               const SizedBox(width: 8),
-              _Badge(text: _statusLabels[status] ?? status, color: _statusColors[status] ?? AppTheme.textSecondary),
+              OpsBadge(text: kStatusLabels[status] ?? status, color: kStatusColors[status] ?? AppTheme.textSecondary),
               const Spacer(),
               Text(
                 createdAt != null && createdAt.length >= 16
@@ -236,7 +201,7 @@ class _HistoryCardState extends State<_HistoryCard> {
             ],
           ),
           const SizedBox(height: 12),
-          Text(_toolLabels[toolName] ?? toolName, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 15)),
+          Text(kToolLabels[toolName] ?? toolName, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 15)),
           const SizedBox(height: 6),
           Text(
             preview,
@@ -254,24 +219,6 @@ class _HistoryCardState extends State<_HistoryCard> {
             ),
         ],
       ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  final String text;
-  final Color color;
-  const _Badge({required this.text, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(text, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
     );
   }
 }
