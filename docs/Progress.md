@@ -39,6 +39,33 @@ Five pushes (`4c78a6a`, `4c68080`, `1d77051` and the two fix commits before them
 
 Tests: pytest **27/27**, `test_rls_manual.py` **7/7**.
 
+### Later the same day — app depth + polish
+
+- **Action detail view.** History rows open the full record: which tier applied
+  and that it was fixed in code rather than chosen by the model, the agent's
+  output, *what the human typed in* as its own section, the trail, and the raw
+  stored row (so "drafts are never overwritten" can be shown, not asserted).
+  `/ops/history` gained `requested_by_name` / `approved_by_name` — an audit
+  trail that renders UUIDs isn't much of an audit trail.
+- **Approval card reworked** — draft and human-entered figures are visually
+  separate, with a confirmation line restating the commitment in the human's
+  own numbers before the button, and a disabled Approve that explains itself.
+- **`decision_note`** — why a human approved or rejected, stored permanently.
+  "Rejected" alone is a weak record six months later.
+- **First-run empty states** — a new company sees the three tiers explained
+  rather than a grid of zeros. It's the first screen a reviewer sees if they
+  sign up themselves.
+- **Inter vendored** (4 weights + OFL licence), and every analyzer lint
+  cleared: `flutter analyze` reports **No issues found!** (was 24).
+- **`flutter test` 17** — the approve-gating rule pulled out to
+  `manualFiguresAreUsable()` and covered against its own past regression
+  ("abc" parsed to 0 and could still be approved), plus widget tests that
+  render the audit dialog for each tool shape. These exist because UI was
+  being changed without anyone clicking through it, and `flutter build` only
+  proves it compiles.
+
+Tests after this pass: pytest **34/34**, flutter test **17/17**.
+
 ### Still open
 - **Model quality on PO drafts** — see the behavioural eval; the fine-tune
   sometimes restates figures loosely and has produced a wrong part code

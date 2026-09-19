@@ -135,6 +135,7 @@ def seed_company_a(api):
     api.post("/ops/approve", {
         "action_id": po_done["id"], "decision": "approved",
         "manual_fields": {"quantity": 250, "amount": 15875.00},
+        "note": "Quantity set to a full carton; price confirmed with Nandi on call.",
     })
 
     step("approval: workflow_exception - REJECTED (history)")
@@ -143,7 +144,10 @@ def seed_company_a(api):
         "sop_reference": "SOP-FIN-04: no dispatch before advance realisation",
         "justification": "Long-standing customer, verbally promised delivery this week",
     })
-    api.post("/ops/approve", {"action_id": exc_done["id"], "decision": "rejected"})
+    api.post("/ops/approve", {
+        "action_id": exc_done["id"], "decision": "rejected",
+        "note": "SOP-FIN-04 exists because of last year's write-off. Dispatch after advance clears.",
+    })
 
     # --- left PENDING on purpose: these are the live demo moments ---
     step("approval: purchase_order - LEFT PENDING (flagship live demo moment)")

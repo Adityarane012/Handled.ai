@@ -85,8 +85,9 @@ handled_app/               Flutter (windows + web are the built platforms)
     main.dart              go_router config, auth redirect, ShellRoute
     providers/auth_provider.dart   JWT in shared_preferences, /auth/me check
     services/api_service.dart      ApiService.get/post, baseUrl http://127.0.0.1:8000
-    ops_labels.dart                shared bucket/status labels + colours, OpsBadge, StatCard —
-                                   so History and the dashboard can't drift on how a bucket reads
+    ops_labels.dart                shared bucket/status labels + colours, OpsBadge, StatCard, and
+                                   manualFiguresAreUsable() — the approve-gating rule, kept as a
+                                   pure function so it's unit-testable rather than in a build method
     screens/
       login_screen.dart, signup_screen.dart
       dashboard_shell.dart         sidebar nav (/ , /ops, /approvals, /history) + DashboardPlaceholder
@@ -94,8 +95,17 @@ handled_app/               Flutter (windows + web are the built platforms)
       ops_tools_screen.dart        /ops — one card per tool, grouped by bucket; triggers all 5
                                    endpoints + inventory-doc upload; inline results
       approval_queue_screen.dart   pending list + _ApprovalCard with manual quantity/amount fields
-      history_screen.dart          /history — full audit trail, bucket/status badges, filters
-    theme.dart                     AppTheme dark theme (bundled font; _fontFamily switch for Inter)
+      history_screen.dart          /history — full audit trail, bucket/status badges, filters;
+                                   rows open action_detail.dart
+      action_detail.dart           showActionDetail() — full record for one action: tier + why,
+                                   agent output, what the human typed, trail (who/when/why), raw row
+    theme.dart                     AppTheme dark theme; _fontFamily = 'Inter' (vendored in
+                                   assets/fonts/, four weights + OFL licence — not google_fonts)
+  test/                            `flutter test` — 17 tests
+    approval_rules_test.dart       the approve-gating safety rule + tier/status wording coverage
+    action_detail_test.dart        renders the audit dialog for each tool shape (catches the
+                                   loosely-typed-JSON render errors `flutter build` can't)
+    widget_test.dart               unauthenticated launch lands on login
 
 docs/                      Source of truth for scope & decisions (see below)
 ```
@@ -150,7 +160,15 @@ Resolved since the 2026-08-28 pass (kept here so nobody re-proposes them): real 
   - **Department routing fixed** — `run_tool` hard-coded `type == "ops"`, so `arch.md` §4's "just add rows" claim wasn't true in code. Department now comes from the registry row.
   - `eval_injection.py` + `eval_ops_quality.py` — the Plan §5.3 eval loop that training never had.
   - pytest **27/27**, `test_rls_manual.py` 7/7.
-- **Next:** rehearse the demo script end-to-end; address the PO-draft quality findings from `eval_ops_quality.py` (see Progress.md "Still open").
+- **2026-09-19 (later)** ✅ app depth + polish pass (`e10f5ff` … `2912689`):
+  - **Action detail view** (`action_detail.dart`) — clicking a History row shows the tier and why it applied, the agent's output, *what the human typed in* as its own section, the trail (who triggered / who decided / when / why), and the raw stored row. `/ops/history` now returns `requested_by_name` / `approved_by_name` (joinedload'ed).
+  - **Approval card reworked** — the agent's draft and the human's figures are visually separate blocks, a confirmation line restates the commitment in the human's own numbers before the button, and a disabled Approve explains itself.
+  - **`decision_note`** — why a human approved or rejected, stored permanently and shown in the trail. Live DB migrated.
+  - **First-run empty states** — a new company gets the three tiers explained instead of a grid of zeros.
+  - **Inter vendored** (4 weights + OFL licence) and switched on; `flutter analyze` now reports **No issues found!** (was 24 lints).
+  - **`flutter test` 17** — the approve-gating rule extracted to `manualFiguresAreUsable()` and covered (incl. the "abc → 0" regression), plus widget tests that render the audit dialog for every tool shape.
+  - pytest **34/34**.
+- **Next:** rehearse the demo script end-to-end; address the PO-draft quality findings from `eval_ops_quality.py` (see Progress.md "Still open"). `docs/Status_and_Approach.md` has the per-category plan for the remaining weeks.
 
 ## Auth — decided
 
