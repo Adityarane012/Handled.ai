@@ -34,7 +34,7 @@ class _ApprovalQueueScreenState extends State<ApprovalQueueScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = ApiService.friendlyError(e);
         _isLoading = false;
       });
     }
@@ -146,7 +146,7 @@ class _ApprovalCardState extends State<_ApprovalCard> {
       widget.onResolved();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiService.friendlyError(e))));
       setState(() => _isSubmitting = false);
     }
   }

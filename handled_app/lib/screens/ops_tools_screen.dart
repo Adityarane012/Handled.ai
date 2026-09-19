@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../ops_labels.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
 
@@ -25,7 +27,7 @@ class OpsToolsScreen extends StatelessWidget {
             style: TextStyle(color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 32),
-          const _Bucket('Auto — runs immediately'),
+          const _Bucket('auto'),
           _ToolCard(
             title: 'Ops status summary',
             subtitle: 'Summarise recent activity',
@@ -41,11 +43,11 @@ class OpsToolsScreen extends StatelessWidget {
             resultKey: 'answer',
             extra: _InventoryUpload(),
           ),
-          const SizedBox(height: 24),
-          const _Bucket('Template-restricted — sends a fixed, pre-approved message'),
+          const SizedBox(height: 28),
+          const _Bucket('template_restricted'),
           const _VendorUpdateCard(),
-          const SizedBox(height: 24),
-          const _Bucket('Approval-required — drafts an action, then waits for a human'),
+          const SizedBox(height: 28),
+          const _Bucket('approval_required'),
           _ToolCard(
             title: 'Purchase order',
             subtitle: 'Draft a PO justification — you enter quantity & amount in the queue',
@@ -75,16 +77,33 @@ class OpsToolsScreen extends StatelessWidget {
   }
 }
 
+/// Section heading for one autonomy tier, using the same badge and wording as
+/// History and the dashboard so a tier reads identically everywhere.
 class _Bucket extends StatelessWidget {
-  final String label;
-  const _Bucket(this.label);
+  final String bucket;
+  const _Bucket(this.bucket);
+
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 12, top: 4),
-        child: Text(label.toUpperCase(),
-            style: const TextStyle(
-                color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.6)),
-      );
+  Widget build(BuildContext context) {
+    final colour = kBucketColors[bucket] ?? AppTheme.textSecondary;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14, top: 4),
+      child: Row(
+        children: [
+          Container(width: 3, height: 26, color: colour),
+          const SizedBox(width: 12),
+          OpsBadge(text: kBucketLabels[bucket] ?? bucket, color: colour),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              kBucketBlurbs[bucket] ?? '',
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Field spec.
@@ -167,7 +186,7 @@ class _ToolCardState extends State<_ToolCard> {
                 : const JsonEncoder.withIndent('  ').convert(res));
       });
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = ApiService.friendlyError(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -211,6 +230,18 @@ class _ToolCardState extends State<_ToolCard> {
                         width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : Text(widget.queued ? 'Draft & queue' : 'Run'),
               ),
+              // Generation runs on a local model and takes ~10s. Without this
+              // the button just spins and the app reads as hung.
+              if (_busy) ...[
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    'Generating on the local model — usually about ten seconds.',
+                    style: TextStyle(
+                        color: AppTheme.textSecondary.withValues(alpha: 0.9), fontSize: 12),
+                  ),
+                ),
+              ],
             ],
           ),
           if (_error != null) ...[
@@ -223,11 +254,39 @@ class _ToolCardState extends State<_ToolCard> {
               width: double.infinity,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppTheme.background,
+                color: widget.queued
+                    ? Colors.orange.withValues(alpha: 0.07)
+                    : AppTheme.background,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppTheme.border),
+                border: Border.all(
+                  color: widget.queued
+                      ? Colors.orange.withValues(alpha: 0.35)
+                      : AppTheme.border,
+                ),
               ),
-              child: SelectableText(_result!, style: Theme.of(context).textTheme.bodyMedium),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SelectableText(_result!, style: Theme.of(context).textTheme.bodyMedium),
+                  // An approval-required tool has deliberately NOT done the
+                  // thing yet, so hand the user straight to the queue rather
+                  // than leaving them to find it.
+                  if (widget.queued) ...[
+                    const SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: () => context.go('/approvals'),
+                      icon: const Icon(Icons.pending_actions_outlined, size: 16),
+                      label: const Text('Review it now'),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        foregroundColor: Colors.orange,
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ],
         ],
@@ -306,7 +365,7 @@ class _VendorUpdateCardState extends State<_VendorUpdateCard> {
       });
       setState(() => _result = Map<String, dynamic>.from(res['message'] ?? {}));
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = ApiService.friendlyError(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -412,7 +471,7 @@ class _InventoryUploadState extends State<_InventoryUpload> {
       final res = await ApiService.post('/ops/inventory-upload', {'doc_text': _doc.text});
       setState(() => _msg = 'Indexed ${res['indexed_chunks']} chunk(s).');
     } catch (e) {
-      setState(() => _msg = e.toString());
+      setState(() => _msg = ApiService.friendlyError(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
