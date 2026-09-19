@@ -243,6 +243,11 @@ class _DashboardPlaceholderState extends State<DashboardPlaceholder> {
           const SizedBox(height: 40),
           if (_loading)
             const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()))
+          else if ((_stats?['total_actions'] ?? 0) == 0)
+            // A brand-new company has nothing to count. Showing a grid of
+            // zeros and dashes would waste the first screen anyone sees, so
+            // explain the model the numbers will later describe.
+            const _FirstRunPanel()
           else ...[
             Wrap(
               spacing: 16,
@@ -315,6 +320,98 @@ class _DashboardPlaceholderState extends State<DashboardPlaceholder> {
               label: const Text('Refresh'),
             ),
           ]),
+        ],
+      ),
+    );
+  }
+}
+
+/// What a brand-new company sees. The three tiers are the product, so the
+/// empty state teaches them rather than showing an empty scoreboard.
+class _FirstRunPanel extends StatelessWidget {
+  const _FirstRunPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    const tiers = ['auto', 'template_restricted', 'approval_required'];
+
+    return Container(
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: Colors.lightGreenAccent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(Icons.check, size: 16, color: Colors.lightGreenAccent),
+            ),
+            const SizedBox(width: 12),
+            Text('Your Ops agent is active',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 17)),
+          ]),
+          const SizedBox(height: 10),
+          Text(
+            'Nothing has run yet. When it does, every action lands in one of three '
+            'tiers — decided in code for each tool, never by the agent at runtime.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5),
+          ),
+          const SizedBox(height: 24),
+          for (final t in tiers) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 3,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: kBucketColors[t],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(kBucketLabels[t] ?? t,
+                            style: TextStyle(
+                                color: kBucketColors[t],
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 2),
+                        Text(kBucketBlurbs[t] ?? '',
+                            style: const TextStyle(
+                                color: AppTheme.textSecondary, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            'Every one of them is logged permanently, including the ones that run on their own.',
+            style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.85), fontSize: 11),
+          ),
+          const SizedBox(height: 22),
+          ElevatedButton.icon(
+            onPressed: () => context.go('/ops'),
+            icon: const Icon(Icons.bolt_outlined, size: 18),
+            label: const Text('Run your first tool'),
+          ),
         ],
       ),
     );

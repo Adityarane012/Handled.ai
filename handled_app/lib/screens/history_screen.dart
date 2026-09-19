@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../ops_labels.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
@@ -91,12 +92,39 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
     final items = _filtered;
     if (items.isEmpty) {
+      final noneAtAll = _actions.isEmpty;
       return Center(
-        child: Text(
-          _actions.isEmpty
-              ? 'No actions yet — run a tool from Ops Tools to see it here.'
-              : 'Nothing in this bucket yet.',
-          style: Theme.of(context).textTheme.bodyMedium,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(noneAtAll ? Icons.history_outlined : Icons.filter_alt_off_outlined,
+                size: 44, color: AppTheme.textSecondary.withValues(alpha: 0.4)),
+            const SizedBox(height: 18),
+            Text(
+              noneAtAll ? 'No actions recorded yet' : 'Nothing in this tier yet',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16),
+            ),
+            const SizedBox(height: 6),
+            SizedBox(
+              width: 380,
+              child: Text(
+                noneAtAll
+                    ? 'Every action the agent takes is written here permanently — including '
+                      'the ones that run without asking. Run a tool to see the first entry.'
+                    : 'No actions have fallen into this tier so far. Try another filter.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5),
+              ),
+            ),
+            if (noneAtAll) ...[
+              const SizedBox(height: 20),
+              OutlinedButton.icon(
+                onPressed: () => context.go('/ops'),
+                icon: const Icon(Icons.bolt_outlined, size: 18),
+                label: const Text('Go to Ops Tools'),
+              ),
+            ],
+          ],
         ),
       );
     }
