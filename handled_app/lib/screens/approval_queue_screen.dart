@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../ops_labels.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
 
@@ -175,6 +176,9 @@ class _ApprovalCardState extends State<_ApprovalCard> {
       canApprove = (_quantity ?? 0) > 0 && (_amount ?? 0) > 0;
     }
 
+    final input = (draft['input'] as Map?) ?? const {};
+    final itemName = input['item_name'] ?? draft['item_name'] ?? 'Unknown item';
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -187,16 +191,11 @@ class _ApprovalCardState extends State<_ApprovalCard> {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  'Needs Approval',
-                  style: TextStyle(color: Colors.orange.shade300, fontSize: 12, fontWeight: FontWeight.w600),
-                ),
+              const OpsBadge(text: 'Approval Required', color: Colors.orange),
+              const SizedBox(width: 8),
+              Text(
+                'Blocked until a human decides',
+                style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.9), fontSize: 11),
               ),
               const Spacer(),
               Text(
@@ -207,85 +206,49 @@ class _ApprovalCardState extends State<_ApprovalCard> {
           ),
           const SizedBox(height: 16),
           Text(
-            isPO
-                ? 'Purchase Order Request: ${draft['input']?['item_name'] ?? draft['item_name'] ?? 'Unknown Item'}'
-                : _titleForTool(widget.action['tool_name']),
+            isPO ? 'Purchase Order: $itemName' : _titleForTool(widget.action['tool_name']),
             style: Theme.of(context).textTheme.titleLarge,
           ),
-          const SizedBox(height: 8),
-
-          if (!isPO) ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppTheme.background,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppTheme.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Agent Reasoning', style: TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textSecondary, fontSize: 12)),
-                  const SizedBox(height: 8),
-                  Text(
-                    draft['agent_output'] ?? draft['agent_justification'] ?? 'No details provided.',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ],
-              ),
-            ),
-          ],
+          const SizedBox(height: 14),
 
           if (isPO) ...[
-            Text('Current Stock: ${draft['input']?['current_stock'] ?? draft['current_stock'] ?? '-'}', style: Theme.of(context).textTheme.bodyMedium),
-            Text('Vendor: ${draft['input']?['preferred_vendor'] ?? draft['preferred_vendor'] ?? 'Not specified'}', style: Theme.of(context).textTheme.bodyMedium),
+            Wrap(spacing: 24, runSpacing: 6, children: [
+              _fact('Current stock', '${input['current_stock'] ?? draft['current_stock'] ?? '-'}'),
+              _fact('Vendor', '${input['preferred_vendor'] ?? draft['preferred_vendor'] ?? 'Not specified'}'),
+              if (input['reorder_reason'] != null) _fact('Trigger', '${input['reorder_reason']}'),
+            ]),
             const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppTheme.background,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppTheme.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Agent Justification', style: TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textSecondary, fontSize: 12)),
-                  const SizedBox(height: 8),
-                  Text(draft['agent_output'] ?? draft['agent_justification'] ?? 'No justification provided.', style: Theme.of(context).textTheme.bodyMedium),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text('Manual Verification Required', style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _quantityController,
-                    decoration: const InputDecoration(labelText: 'Quantity to Order'),
-                    keyboardType: TextInputType.number,
-                    onChanged: (v) => setState(() {}),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: TextField(
-                    controller: _amountController,
-                    decoration: const InputDecoration(labelText: 'Total Amount (₹)'),
-                    keyboardType: TextInputType.number,
-                    onChanged: (v) => setState(() {}),
-                  ),
-                ),
-              ],
-            )
           ],
 
-          const SizedBox(height: 24),
+          _draftPanel(
+            context,
+            label: isPO ? 'What the agent drafted' : 'Agent reasoning',
+            text: draft['agent_output'] ?? draft['agent_justification'] ?? 'No details provided.',
+          ),
+
+          if (isPO) ...[
+            const SizedBox(height: 20),
+            _manualEntryBlock(context),
+          ],
+
+          const SizedBox(height: 20),
+          if (isPO && canApprove) ...[
+            _confirmationLine(context),
+            const SizedBox(height: 12),
+          ],
           Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              if (isPO && !canApprove)
+                Expanded(
+                  child: Text(
+                    _quantityController.text.trim().isEmpty && _amountController.text.trim().isEmpty
+                        ? 'Enter both figures to enable approval.'
+                        : 'Both figures must be numbers greater than zero.',
+                    style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.9), fontSize: 11),
+                  ),
+                )
+              else
+                const Spacer(),
               TextButton(
                 onPressed: _isSubmitting ? null : () => _submitDecision('rejected'),
                 child: const Text('Reject', style: TextStyle(color: Colors.redAccent)),
@@ -294,12 +257,151 @@ class _ApprovalCardState extends State<_ApprovalCard> {
               ElevatedButton(
                 onPressed: (_isSubmitting || !canApprove) ? null : () => _submitDecision('approved'),
                 style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryAction),
-                child: _isSubmitting 
+                child: _isSubmitting
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Text('Approve'),
               )
             ],
           )
+        ],
+      ),
+    );
+  }
+
+  Widget _fact(String label, String value) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label.toUpperCase(),
+              style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6)),
+          const SizedBox(height: 2),
+          Text(value, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+        ],
+      );
+
+  Widget _draftPanel(BuildContext context, {required String label, required String text}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.auto_awesome_outlined, size: 13, color: AppTheme.textSecondary),
+            const SizedBox(width: 6),
+            Text(label,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, color: AppTheme.textSecondary, fontSize: 12)),
+          ]),
+          const SizedBox(height: 10),
+          Text(text, style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.45)),
+        ],
+      ),
+    );
+  }
+
+  /// The fields the agent is forbidden to fill. Rendered as its own block,
+  /// visually separated from the draft above it, because the split between
+  /// "what the AI wrote" and "what the human commits to" is the product.
+  Widget _manualEntryBlock(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryAction.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppTheme.primaryAction.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.edit_outlined, size: 13, color: AppTheme.primaryAction),
+            const SizedBox(width: 6),
+            Text('You enter these',
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.primaryAction,
+                    fontSize: 12)),
+          ]),
+          const SizedBox(height: 4),
+          Text(
+            'The agent is not permitted to suggest a quantity or an amount. '
+            'These fields start empty on purpose.',
+            style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.95), fontSize: 11),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _quantityController,
+                  decoration: const InputDecoration(labelText: 'Quantity to order'),
+                  keyboardType: TextInputType.number,
+                  onChanged: (v) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: TextField(
+                  controller: _amountController,
+                  decoration: const InputDecoration(labelText: 'Total amount (₹)'),
+                  keyboardType: TextInputType.number,
+                  onChanged: (v) => setState(() {}),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Restates the commitment in the human's own figures immediately above the
+  /// button, so approving is a deliberate act rather than a reflex click.
+  Widget _confirmationLine(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.lightGreenAccent.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.lightGreenAccent.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle_outline, size: 15, color: Colors.lightGreenAccent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                children: [
+                  const TextSpan(text: 'You are authorising '),
+                  TextSpan(
+                    text: '$_quantity units',
+                    style: const TextStyle(
+                        color: AppTheme.textPrimary, fontWeight: FontWeight.w700),
+                  ),
+                  const TextSpan(text: ' at a total of '),
+                  TextSpan(
+                    text: '₹${_amount!.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                        color: AppTheme.textPrimary, fontWeight: FontWeight.w700),
+                  ),
+                  const TextSpan(text: ' — your figures, not the agent\'s.'),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
