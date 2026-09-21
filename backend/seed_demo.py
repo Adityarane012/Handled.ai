@@ -84,13 +84,24 @@ class Api:
         })
         self.token = self.post("/auth/login", {"email": email, "password": PASSWORD})["access_token"]
 
+    def add_member(self, name, email, role):
+        """Owner adds a colleague; returns an Api logged in as them."""
+        self.post("/company/users", {"name": name, "email": email, "password": PASSWORD, "role": role})
+        member = Api(self.base)
+        member.token = member.post("/auth/login", {"email": email, "password": PASSWORD})["access_token"]
+        return member
+
 
 def step(msg):
     print(f"  -> {msg}", flush=True)
 
 
-def seed_company_a(api):
-    """The company the demo is actually driven from — rich, realistic history."""
+def seed_company_a(api, staff):
+    """The company the demo is actually driven from — rich, realistic history.
+
+    `staff` drafts the two pending items, so the queue shows junior work
+    waiting on a senior — the owner or department head approves it live.
+    """
     step("uploading inventory document for RAG")
     n = api.post("/ops/inventory-upload", {"doc_text": INVENTORY_DOC, "source": "stock_list_sep2026"})
     print(f"     indexed {n['indexed_chunks']} chunks")
@@ -150,15 +161,15 @@ def seed_company_a(api):
     })
 
     # --- left PENDING on purpose: these are the live demo moments ---
-    step("approval: purchase_order - LEFT PENDING (flagship live demo moment)")
-    api.post("/ops/purchase-order", {
+    step("approval: purchase_order - LEFT PENDING, drafted by staff (flagship live demo moment)")
+    staff.post("/ops/purchase-order", {
         "item_name": "Deep Groove Ball Bearing 6204-2RS (BRG-6204)", "current_stock": 46,
         "reorder_reason": "Stock audit found 46 units against a reorder point of 120",
         "preferred_vendor": "Nandi Bearings",
     })
 
-    step("approval: workflow_exception - LEFT PENDING (optional demo step)")
-    api.post("/ops/workflow-exception", {
+    step("approval: workflow_exception - LEFT PENDING, drafted by staff (optional demo step)")
+    staff.post("/ops/workflow-exception", {
         "request_description": "Air-freight BELT-B55 shortfall from Chennai supplier instead of road",
         "sop_reference": "SOP-LOG-02: road freight is the default for domestic replenishment",
         "justification": "Line stoppage risk at Deshmukh Engineering if belts miss Friday",
@@ -200,12 +211,17 @@ def main():
     stamp = int(time.time())
     a_email = f"ops@sharma-industrial-{stamp}.in"
     b_email = f"ops@krishna-auto-{stamp}.in"
+    staff_email = f"amit@sharma-industrial-{stamp}.in"
+    head_email = f"neha@sharma-industrial-{stamp}.in"
     started = time.time()
 
     print("\nSeeding Company A - Sharma Industrial Supplies")
     api_a = Api(args.base_url)
     api_a.signup_and_login("Sharma Industrial Supplies", "Rohit Sharma", a_email)
-    seed_company_a(api_a)
+    step("team: adding a staff member and a department head")
+    staff_a = api_a.add_member("Amit Patil", staff_email, "staff")
+    api_a.add_member("Neha Kulkarni", head_email, "department_head")
+    seed_company_a(api_a, staff_a)
 
     print("\nSeeding Company B - Krishna Auto Components")
     api_b = Api(args.base_url)
@@ -220,7 +236,9 @@ def main():
 Done in {time.time() - started:.0f}s.
 
   Company A - Sharma Industrial Supplies
-    login     {a_email}  /  {PASSWORD}
+    owner     {a_email}  /  {PASSWORD}   (Rohit Sharma)
+    dept head {head_email}  /  {PASSWORD}   (Neha Kulkarni - can approve)
+    staff     {staff_email}  /  {PASSWORD}   (Amit Patil - drafts, cannot approve)
     history   {len(hist_a)} actions
     pending   {len(pend_a)} awaiting approval  <- the live demo moments
 
@@ -228,7 +246,8 @@ Done in {time.time() - started:.0f}s.
     login     {b_email}  /  {PASSWORD}
     history   {len(hist_b)} actions
 
-Log in as Company A for the walkthrough; log in as Company B to show isolation.
+Log in as Company A's owner for the walkthrough; as Amit to show staff can draft
+but not approve; as Company B to show isolation.
 """)
 
 

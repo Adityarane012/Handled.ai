@@ -146,6 +146,16 @@ Point at the rendered message.
 
 Approvals → the pending **Purchase Order** for the 6204 bearings.
 
+Point at **"Requested by Amit Patil"** under the title.
+
+> "Amit is staff. He used the agent to draft this — he's allowed to. He is *not*
+> allowed to approve it: that takes a department head or the owner, and the
+> server refuses him even if he calls the API directly. Junior drafts, senior
+> commits."
+
+*(Optional, if time: the Team screen shows the three roles; logging in as Amit
+shows this same card view-only, with no figure fields or buttons.)*
+
 > "Stock audit found 46 units against a reorder point of 120. The agent drafted
 > the justification for reordering."
 

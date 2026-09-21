@@ -19,6 +19,7 @@ Non-negotiable rules:
 - **Every** action writes a permanent `agent_action` row, regardless of bucket. Never deleted or overwritten on reject/edit.
 - For money/dates: the AI writes the wording, the **human types the actual number** in the approval screen. Fields render **empty, never pre-filled** with an AI guess. Approve button stays disabled until they're filled.
 - No batch approval in the prototype.
+- **Roles are hard-coded too** (`routers/auth.py`): anyone in the company can trigger a tool; only `APPROVER_ROLES` (`owner_admin`, `department_head`) can decide an approval; only the owner adds people. Enforced in the backend (403); the app reads `can_approve`/`can_manage_team` from `/auth/me`.
 
 ## Architecture — 4 layers, kept separate on purpose
 
@@ -41,6 +42,7 @@ backend/
   routers/
     auth.py                /auth/login (admin session), /auth/me, get_tenant_ctx dependency
     company.py             /company/signup — creates company + owner_admin + active Ops dept
+    team.py                GET/POST /company/users — owner adds department_head/staff (RLS session)
     ops/
       purchase.py          POST /ops/purchase-order      (approval_required)
       approvals.py         GET /ops/approvals, POST /ops/approve, GET /ops/history, GET /ops/stats
@@ -74,13 +76,14 @@ backend/
   eval_ops_quality.py      behavioural eval vs the product's safety claims (PO figure
                            suppression, grounded refusal, no invented numbers/part codes)
   pytest.ini               testpaths=tests
-  tests/                   `..\venv\Scripts\python -m pytest` (run from backend/) — 45 tests
+  tests/                   `..\venv\Scripts\python -m pytest` (run from backend/) — 56 tests
     conftest.py            in-process app + Postgres; stubs agent.crew._generate (@real_llm opts out)
     test_tenant_isolation.py   Phase 3.1 adversarial cross-tenant (API + RLS-alone)
     test_audit_log.py          Phase 3.3 audit integrity + /ops/history + /ops/stats
     test_cost_controls.py      Phase 3.2 CREW_MAX_ITER/RPM loaded + applied; failure path bounded
     test_prompt_injection.py   untrusted RAG/log content is fenced, guarded, task restated after
     test_department_agnostic.py  a runtime-registered 2nd-department tool routes correctly
+    test_team.py               roles: staff drafts but 403 on approve, dept head approves, owner-only add
 
 handled_app/               Flutter (windows + web are the built platforms)
   lib/
@@ -97,13 +100,14 @@ handled_app/               Flutter (windows + web are the built platforms)
       ops_tools_screen.dart        /ops — one card per tool, grouped by bucket; triggers all 5
                                    endpoints + inventory-doc upload; inline results
       approval_queue_screen.dart   pending list + _ApprovalCard with manual quantity/amount fields
+      team_screen.dart             /team — members + roles; owner-only add-member form
       history_screen.dart          /history — full audit trail, bucket/status badges, filters;
                                    rows open action_detail.dart
       action_detail.dart           showActionDetail() — full record for one action: tier + why,
                                    agent output, what the human typed, trail (who/when/why), raw row
     theme.dart                     AppTheme dark theme; _fontFamily = 'Inter' (vendored in
                                    assets/fonts/, four weights + OFL licence — not google_fonts)
-  test/                            `flutter test` — 36 tests
+  test/                            `flutter test` — 40 tests
     approval_rules_test.dart       the approve-gating safety rule + tier/status wording coverage
     action_detail_test.dart        renders the audit dialog for each tool shape (catches the
                                    loosely-typed-JSON render errors `flutter build` can't)
@@ -140,11 +144,11 @@ docs/                      Source of truth for scope & decisions (see below)
 - **Never re-add `google_fonts`** — its `objective_c` native-assets hook breaks on the space in `C:\Users\Aditya Rane\`. Inter is vendored in `assets/fonts/` instead.
 - **PO-draft quality** — the 3B fine-tune has intermittently invented a threshold and mistyped a part code (`B55` → `B52`). Contained by design (human types quantity/amount), but see `eval_ops_quality.py` + `docs/Status_and_Approach.md` §3. Don't retrain unless a `--runs 10` eval shows suite A degrading.
 - **Demo not yet rehearsed** — seed script + `docs/Demo_Script.md` exist; the Phase 4 exit criterion (2 end-to-end rehearsals + a practised Ollama-down fallback) is still open.
-- **One user per company, roles not enforced** — signup creates only an `owner_admin`; there's no invite/add-user endpoint, and `/ops/approve` never checks `ctx.role`, so the `department_head`/`staff` roles in the DB CHECK are unused. Visibility is already right for a manager: `/ops/history` is company-wide with `requested_by_name`/`approved_by_name` on every row.
+- **Team members: no email invites, no remove/role-change** — the owner sets a starting password and hands it over; there's no password-reset or deactivate yet. Role in the JWT is read at login, so a (future) role change would need a re-login.
 - `crewai` prints noisy `Failed to connect to OpenAI API` lines when Ollama is down — cosmetic; the fallback still fires.
 - `LICENSE` — none yet; deliberate (maintainer's call).
 
-Resolved (kept here so nobody re-proposes them): real LLM generation via the fine-tuned `handled-ops` Ollama model (~10s/call); `inventory_qa` distance-cutoff (`agent/rag.py::_MAX_DISTANCE`); `backend/tests/` (45 green); dashboard analytics off `/ops/stats`; DB schema migration #1–5 + `decision_note` (`605b9f8`, `2912689`; `migrate.py` for other machines); Inter vendored; demo seed data + script; signup/login error handling (`75e9e7b`).
+Resolved (kept here so nobody re-proposes them): real LLM generation via the fine-tuned `handled-ops` Ollama model (~10s/call); `inventory_qa` distance-cutoff (`agent/rag.py::_MAX_DISTANCE`); `backend/tests/` (56 green); dashboard analytics off `/ops/stats`; DB schema migration #1–5 + `decision_note` (`605b9f8`, `2912689`; `migrate.py` for other machines); Inter vendored; demo seed data + script; signup/login error handling (`75e9e7b`).
 
 ## Status (2026-09-21, Phases 0–3 done, Phase 4 ~half — rehearsal remaining)
 
@@ -178,6 +182,7 @@ Resolved (kept here so nobody re-proposes them): real LLM generation via the fin
   - **Audit-trail timestamps** — `approved_at` used naive `utcnow()`, which Postgres (tz `Asia/Calcutta`) read as IST, so approvals were filed 5.5h *before* their trigger. Flutter's detail dialog also showed UTC while the History list showed DB wall-clock. Both fixed; one shared `formatTimestamp()` does `toLocal()`.
   - Verified live on `handled-ops`: `seed_demo.py` (0 fallback rows), Flutter web UI (dashboard, approval gating incl. zeros, approve → History → detail trail), cross-tenant approve → 404. pytest **44/44**, `flutter test` **36/36**, `flutter analyze` clean, `test_rls_manual.py` 7/7.
   - **Concurrent decisions** — `/ops/approve` read-then-wrote with no lock; two people deciding at once both got 200 and the second overwrote the first (live: 4/5 trials, once a row marked `rejected` still holding an approved quantity). Now `SELECT … FOR UPDATE`; loser gets 400. pytest **45/45**.
+  - **Team members + roles** — `routers/team.py` (owner adds `department_head`/`staff`), staff 403 on `/ops/approve`, `/auth/me` returns `can_approve`/`can_manage_team`, `/team` screen, approval cards say who requested them and are view-only for staff, History rows show "Requested by X · Approved by Y". `seed_demo.py` now adds Amit Patil (staff, drafts the 2 pending items) + Neha Kulkarni (dept head). pytest **56/56**, `flutter test` **40/40**; checked in the web build as staff and as owner.
   - This laptop's Flutter SDK (3.44.6) resolves older `intl`/`matcher` than the committed `pubspec.lock` — don't commit the lock churn from here.
 - **Next:** rehearse the demo script end-to-end; address the PO-draft quality findings from `eval_ops_quality.py` (see Progress.md "Still open"). `docs/Status_and_Approach.md` has the per-category plan for the remaining weeks.
 
