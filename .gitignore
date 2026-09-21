@@ -42,3 +42,6 @@ scratch/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Playwright MCP browser-check output
+.playwright-mcp/

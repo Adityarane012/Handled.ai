@@ -63,7 +63,9 @@ backend/
     session.py             engine (handled_app role, RLS on) + admin_engine (postgres, RLS bypass).
                            get_db / get_admin_db / set_tenant_context (SET LOCAL)
     rls_setup.py           apply_rls() — idempotent policy DDL
-  init_db.py               create tables + apply RLS
+  init_db.py               create tables + apply RLS (new DB only — create_all never ALTERs)
+  migrate.py               idempotent ALTERs that bring an EXISTING DB up to the current schema
+                           (requested_by, decision_note, dept UNIQUE, queue index, company RLS)
   test_rls_manual.py       raw-SQL cross-tenant isolation proof (fixtures via admin, asserts via runtime role)
   seed_demo.py             Phase 4.1 demo data — 2 companies via the real API (~50s), leaves 2
                            approvals PENDING on purpose for the live demo moment
@@ -72,7 +74,7 @@ backend/
   eval_ops_quality.py      behavioural eval vs the product's safety claims (PO figure
                            suppression, grounded refusal, no invented numbers/part codes)
   pytest.ini               testpaths=tests
-  tests/                   `..\venv\Scripts\python -m pytest` (run from backend/) — 27 tests
+  tests/                   `..\venv\Scripts\python -m pytest` (run from backend/) — 44 tests
     conftest.py            in-process app + Postgres; stubs agent.crew._generate (@real_llm opts out)
     test_tenant_isolation.py   Phase 3.1 adversarial cross-tenant (API + RLS-alone)
     test_audit_log.py          Phase 3.3 audit integrity + /ops/history + /ops/stats
@@ -101,7 +103,7 @@ handled_app/               Flutter (windows + web are the built platforms)
                                    agent output, what the human typed, trail (who/when/why), raw row
     theme.dart                     AppTheme dark theme; _fontFamily = 'Inter' (vendored in
                                    assets/fonts/, four weights + OFL licence — not google_fonts)
-  test/                            `flutter test` — 17 tests
+  test/                            `flutter test` — 36 tests
     approval_rules_test.dart       the approve-gating safety rule + tier/status wording coverage
     action_detail_test.dart        renders the audit dialog for each tool shape (catches the
                                    loosely-typed-JSON render errors `flutter build` can't)
@@ -116,7 +118,8 @@ docs/                      Source of truth for scope & decisions (see below)
 - **Backend:** `cd backend && ..\venv\Scripts\uvicorn main:app --reload` → http://localhost:8000 (`/health`, `/docs`).
 - **DB:** local Postgres, db `handled_dev`. Runtime connects as non-superuser `handled_app` (RLS enforced); all DDL (`init_db.py`, `rls_setup.py`, startup `create_all`) uses the `postgres` superuser via `admin_engine`. Both URLs in `backend/.env`.
 - **First-time DB setup:** `python init_db.py` then `python test_rls_manual.py` (must pass before building on top).
-- **LLM — local Ollama (no-cost phase):** `.env` has `LLM_PROVIDER=ollama`, `LLM_MODEL=llama3.2`, `OLLAMA_BASE_URL=http://localhost:11434`. To get real generation: start Ollama (installed at `C:\Users\Aditya Rane\AppData\Local\Programs\Ollama\ollama.EXE`) and `ollama pull llama3.2` (or a smaller tag like `llama3.2:1b` / `qwen2.5:3b`). Until then, tools return labelled fallback text — the app still works. Flip `LLM_PROVIDER` back to `anthropic`/`openai`/`gemini` + set the key to use a hosted model.
+- **Existing DB / after pulling schema changes:** `python migrate.py` (idempotent, safe to re-run). Without it, any `agent_action` write fails with `column "requested_by" does not exist` — the live DB on one machine was migrated by hand, so a second machine needs this.
+- **LLM — local Ollama, fine-tuned model:** `.env` has `LLM_PROVIDER=ollama`, `LLM_MODEL=handled-ops`, `OLLAMA_BASE_URL=http://localhost:11434`. `handled-ops:latest` is a fine-tuned Qwen2.5-3B (QLoRA, from `backend/training/`) registered in Ollama from `backend/training/models/handled-ops-qwen2.5-3b/handled-ops-qwen2.5-3b.Q4_K_M.gguf` (gitignored; `ollama create handled-ops -f Modelfile` in that dir). Start Ollama (installed at `C:\Users\Aditya Rane\AppData\Local\Programs\Ollama\ollama.EXE`) before running the backend. Fallbacks: `LLM_MODEL=llama3.2` (base, `ollama pull llama3.2`) or flip `LLM_PROVIDER` to `anthropic`/`openai`/`gemini` + key for a hosted model. If Ollama is down or the model is missing, tools return labelled fallback text — the app still works.
 - **`inventory_qa` RAG:** first call downloads the MiniLM ONNX embedding model (~80 MB, one-time, then offline). Vectors persist in `backend/.chroma/` (gitignored).
 - **Flutter:** `cd handled_app && flutter run -d windows` (or `-d chrome`). SDK at `C:\Users\Aditya Rane\flutter`.
 - **CrewAI caps:** `CREW_MAX_ITER=6`, `CREW_MAX_RPM=10`, `LLM_MONTHLY_SPEND_CAP_USD=20` (only relevant on a paid provider).
@@ -131,18 +134,18 @@ docs/                      Source of truth for scope & decisions (see below)
 - Flutter stays logic-free — new behavior goes in the backend.
 - Timeline pressure is real. When behind, cut `workflow_exception_approval` first — **never** cut RLS work or the PO approval flow.
 
-## Known issues / not yet done (as of 2026-08-31)
+## Known issues / not yet done (as of 2026-09-21)
 
 - **`flutter run -d windows` needs Windows Developer Mode ON** (plugin symlink support) — `start ms-settings:developers`. `-d chrome` / `build web` are unaffected.
-- `google_fonts` was removed (its `objective_c` native-assets hook breaks on the space in `C:\Users\Aditya Rane\`). Theme uses the bundled default font; flip `_fontFamily` in `theme.dart` to `'Inter'` after vendoring `Inter-*.ttf` into `assets/fonts/` + declaring it in `pubspec.yaml`.
-- Signup/login screens not reviewed in depth.
+- **Never re-add `google_fonts`** — its `objective_c` native-assets hook breaks on the space in `C:\Users\Aditya Rane\`. Inter is vendored in `assets/fonts/` instead.
+- **PO-draft quality** — the 3B fine-tune has intermittently invented a threshold and mistyped a part code (`B55` → `B52`). Contained by design (human types quantity/amount), but see `eval_ops_quality.py` + `docs/Status_and_Approach.md` §3. Don't retrain unless a `--runs 10` eval shows suite A degrading.
+- **Demo not yet rehearsed** — seed script + `docs/Demo_Script.md` exist; the Phase 4 exit criterion (2 end-to-end rehearsals + a practised Ollama-down fallback) is still open.
 - `crewai` prints noisy `Failed to connect to OpenAI API` lines when Ollama is down — cosmetic; the fallback still fires.
-- No demo seed data / rehearsed walkthrough script yet — Week 7–8 work, not started.
 - `LICENSE` — none yet; deliberate (maintainer's call).
 
-Resolved since the 2026-08-28 pass (kept here so nobody re-proposes them): real LLM generation via the fine-tuned `handled-ops` Ollama model (confirmed end-to-end, ~10s/call); `inventory_qa` distance-cutoff (`agent/rag.py::_MAX_DISTANCE`, already shipped in the QLoRA commit); `backend/tests/` — 15 tests green; dashboard stat cards — `DashboardPlaceholder` already fetches the real pending-approvals count; DB schema migration #1–5 — applied and pushed (`605b9f8`).
+Resolved (kept here so nobody re-proposes them): real LLM generation via the fine-tuned `handled-ops` Ollama model (~10s/call); `inventory_qa` distance-cutoff (`agent/rag.py::_MAX_DISTANCE`); `backend/tests/` (44 green); dashboard analytics off `/ops/stats`; DB schema migration #1–5 + `decision_note` (`605b9f8`, `2912689`; `migrate.py` for other machines); Inter vendored; demo seed data + script; signup/login error handling (`75e9e7b`).
 
-## Status (2026-08-28, Weeks 0–6 done)
+## Status (2026-09-21, Phases 0–3 done, Phase 4 ~half — rehearsal remaining)
 
 - **Weeks 0–3** ✅ regression-checked (`scratchpad/verify_w0_w3.py`): deps, DB schema, RLS (enabled + NULLIF-hardened), `/health`, signup→owner+Ops, JWT login, `/auth/me`, tenant isolation, PO tool + approval queue (400 without numbers, approved with, reject retains row), Flutter safety UI. `test_rls_manual.py` was stale (seeded fixtures over the RLS role) — **rewritten** to seed via `admin_engine` + assert over the runtime role; now passes 7/7.
 - **Phase 2 / Week 4** ✅ **all 5 Ops tools built + verified end-to-end** (smoke test: signup → 5 tools → approval queue → approve PO with manual numbers → 2nd-company isolation holds). Generic `run_tool()` dispatcher + `TOOL_REGISTRY` lookup + RAG retrieval working. Real LLM output pending Ollama.
@@ -168,6 +171,12 @@ Resolved since the 2026-08-28 pass (kept here so nobody re-proposes them): real 
   - **Inter vendored** (4 weights + OFL licence) and switched on; `flutter analyze` now reports **No issues found!** (was 24 lints).
   - **`flutter test` 17** — the approve-gating rule extracted to `manualFiguresAreUsable()` and covered (incl. the "abc → 0" regression), plus widget tests that render the audit dialog for every tool shape.
   - pytest **34/34**.
+- **2026-09-21** ✅ second-machine sync + live verification:
+  - `migrate.py` — the hand-applied schema changes (#1–5 + `decision_note`) as an idempotent script; this laptop's DB was on the old shape and every `agent_action` write 500'd until it ran.
+  - **PO approval enforced server-side** — `/ops/approve` only checked the keys existed, so a direct API call approved a PO for quantity 0 / ₹0 (the Flutter gate was the only guard). Now positive int quantity + positive finite amount, and only those two keys merge into `final_output` (a stray `agent_output` key could overwrite the AI draft in the approved record).
+  - **Audit-trail timestamps** — `approved_at` used naive `utcnow()`, which Postgres (tz `Asia/Calcutta`) read as IST, so approvals were filed 5.5h *before* their trigger. Flutter's detail dialog also showed UTC while the History list showed DB wall-clock. Both fixed; one shared `formatTimestamp()` does `toLocal()`.
+  - Verified live on `handled-ops`: `seed_demo.py` (0 fallback rows), Flutter web UI (dashboard, approval gating incl. zeros, approve → History → detail trail), cross-tenant approve → 404. pytest **44/44**, `flutter test` **36/36**, `flutter analyze` clean, `test_rls_manual.py` 7/7.
+  - This laptop's Flutter SDK (3.44.6) resolves older `intl`/`matcher` than the committed `pubspec.lock` — don't commit the lock churn from here.
 - **Next:** rehearse the demo script end-to-end; address the PO-draft quality findings from `eval_ops_quality.py` (see Progress.md "Still open"). `docs/Status_and_Approach.md` has the per-category plan for the remaining weeks.
 
 ## Auth — decided
