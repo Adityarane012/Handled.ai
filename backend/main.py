@@ -15,7 +15,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 from models.db_models import Base
 from db.session import admin_engine
 
-from routers import auth, company
+from routers import auth, company, team
 from routers.ops import purchase, approvals, status, inventory, vendor, exception
 
 app = FastAPI(
@@ -26,6 +26,7 @@ app = FastAPI(
 
 app.include_router(auth.router)
 app.include_router(company.router)
+app.include_router(team.router)
 app.include_router(purchase.router, prefix="/ops", tags=["ops"])
 app.include_router(approvals.router, prefix="/ops", tags=["ops"])
 app.include_router(status.router, prefix="/ops", tags=["ops"])

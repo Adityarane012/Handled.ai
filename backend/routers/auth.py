@@ -19,6 +19,14 @@ JWT_SECRET = os.getenv("JWT_SECRET", "handled-dev-secret-change-in-production")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRY_MINUTES = int(os.getenv("JWT_EXPIRY_MINUTES", "60"))
 
+# Who may do what — hard-coded, like the autonomy buckets, never inferred.
+# Anyone in the company can trigger a tool (junior staff drafting work is the
+# point); only these roles can decide an approval_required action.
+APPROVER_ROLES = {"owner_admin", "department_head"}
+# Only the owner adds people. Roles they can hand out — never another owner.
+TEAM_ADMIN_ROLES = {"owner_admin"}
+ASSIGNABLE_ROLES = {"department_head", "staff"}
+
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
@@ -83,5 +91,9 @@ def get_me(ctx: TenantCtx = Depends(get_tenant_ctx), db: Session = Depends(get_d
         "name": user.name,
         "email": user.email,
         "role": user.role,
-        "company_id": str(user.company_id)
+        "company_id": str(user.company_id),
+        # The app reads these instead of re-deriving permissions from the role
+        # string, so the rule lives in one place (here) and Flutter stays dumb.
+        "can_approve": user.role in APPROVER_ROLES,
+        "can_manage_team": user.role in TEAM_ADMIN_ROLES,
     }

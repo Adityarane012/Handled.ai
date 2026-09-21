@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, timezone
 
 from db.session import get_db
-from routers.auth import get_tenant_ctx
+from routers.auth import get_tenant_ctx, APPROVER_ROLES
 from models.schemas import ApprovalRequest, AgentActionResponse
 from models.db_models import AgentAction
 
@@ -89,8 +89,9 @@ def list_action_history(db: Session = Depends(get_db), ctx=Depends(get_tenant_ct
 @router.get("/approvals", response_model=list[AgentActionResponse])
 def list_pending_approvals(db: Session = Depends(get_db), ctx=Depends(get_tenant_ctx)):
     """List all actions pending approval for the current company."""
-    # RLS enforces isolation here implicitly, but we add company_id for clarity
-    actions = db.query(AgentAction).filter(
+    # RLS enforces isolation here implicitly, but we add company_id for clarity.
+    # joinedload: the card shows who asked for it (staff member, not just "the AI").
+    actions = db.query(AgentAction).options(joinedload(AgentAction.requester)).filter(
         AgentAction.company_id == ctx.company_id,
         AgentAction.status == "pending_approval"
     ).order_by(AgentAction.created_at.desc()).all()
@@ -119,6 +120,11 @@ def approve_action(payload: ApprovalRequest, db: Session = Depends(get_db), ctx=
     Approve or reject a pending action.
     The frontend must pass the manual_fields (e.g. quantity, amount) for approval_required tools.
     """
+    # Checked before touching the row: staff can see the queue and trigger
+    # tools, but a binding decision needs a department head or the owner.
+    if ctx.role not in APPROVER_ROLES:
+        raise HTTPException(status_code=403, detail="Only a department head or the owner can approve or reject.")
+
     # FOR UPDATE: two people deciding the same action at once would otherwise
     # both read "pending" and both write — the second silently overwriting the
     # first's decision (seen: a row marked rejected still carrying an approved

@@ -37,6 +37,27 @@ class CompanyResponse(BaseModel):
     company_id: str
 
 
+# ─── Team ───────────────────────────────────────────────────────────────────
+
+class TeamMemberCreate(BaseModel):
+    """The owner adds a colleague and hands them a starting password."""
+    name: str = Field(..., min_length=1, max_length=200)
+    email: str = Field(..., min_length=3, max_length=320)
+    password: str = Field(..., min_length=8)
+    # Never owner_admin — a company has exactly one owner, set at signup.
+    role: str = Field(..., pattern="^(department_head|staff)$")
+
+
+class TeamMemberResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    email: str
+    role: str
+    created_at: Optional[datetime] = None
+
+
 # ─── Agent Actions ──────────────────────────────────────────────────────────
 
 class AgentActionResponse(BaseModel):
