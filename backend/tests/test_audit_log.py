@@ -4,6 +4,7 @@ Phase 3.3 — audit-log integrity.
 Every tool call writes a permanent agent_action row regardless of bucket, and
 reject/edit never delete or overwrite the original draft.
 """
+import pytest
 from sqlalchemy import text
 
 
@@ -216,3 +217,50 @@ def test_approve_merges_manual_fields_without_losing_draft(client, make_company,
     assert row[2]["amount"] == 9999.5
     # the AI's justification carried into final_output too
     assert "agent_output" in row[2]
+
+
+@pytest.mark.parametrize("fields", [
+    {"quantity": 0, "amount": 0},
+    {"quantity": 10, "amount": 0},
+    {"quantity": -5, "amount": 500.0},
+    {"quantity": "abc", "amount": 500.0},
+    {"quantity": True, "amount": 500.0},
+    {"quantity": 2.5, "amount": 500.0},
+    {"quantity": 10, "amount": None},
+    {"quantity": 10, "amount": "500"},
+])
+def test_approve_rejects_unusable_po_figures(client, make_company, admin_conn, fields):
+    # The app gates the button on manualFiguresAreUsable(), but the API is the
+    # rule: a direct call with a zero/garbage figure must not execute a PO.
+    co = make_company()
+    H = co["headers"]
+    pid = client.post("/ops/purchase-order",
+                      json={"item_name": "Gasket", "current_stock": 4}, headers=H).json()["id"]
+
+    r = client.post("/ops/approve", json={
+        "action_id": pid, "decision": "approved", "manual_fields": fields,
+    }, headers=H)
+
+    assert r.status_code == 400
+    status = admin_conn.execute(text(
+        "SELECT status FROM agent_action WHERE id = :i"), {"i": pid}).scalar()
+    assert status == "pending_approval"
+
+
+def test_approve_cannot_overwrite_draft_via_manual_fields(client, make_company, admin_conn):
+    co = make_company()
+    H = co["headers"]
+    pid = client.post("/ops/purchase-order",
+                      json={"item_name": "Gasket", "current_stock": 4}, headers=H).json()["id"]
+    agent_output = admin_conn.execute(text(
+        "SELECT draft_output->>'agent_output' FROM agent_action WHERE id = :i"), {"i": pid}).scalar()
+
+    client.post("/ops/approve", json={
+        "action_id": pid, "decision": "approved",
+        "manual_fields": {"quantity": 5, "amount": 100.0, "agent_output": "forged"},
+    }, headers=H)
+
+    final = admin_conn.execute(text(
+        "SELECT final_output FROM agent_action WHERE id = :i"), {"i": pid}).scalar()
+    assert final["agent_output"] == agent_output
+

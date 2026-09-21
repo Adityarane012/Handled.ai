@@ -1,3 +1,5 @@
+import math
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -95,6 +97,22 @@ def list_pending_approvals(db: Session = Depends(get_db), ctx=Depends(get_tenant
     
     return actions
 
+def _usable_po_figures(fields: dict) -> tuple[int, float]:
+    """
+    Server-side twin of the app's manualFiguresAreUsable(): quantity a positive
+    whole number, amount a positive finite number. The button gating in Flutter
+    is a convenience — this is the rule, since the API can be called directly.
+    """
+    quantity, amount = fields.get("quantity"), fields.get("amount")
+    # bool is a subclass of int in Python — True must not pass as quantity 1.
+    if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be a whole number greater than 0")
+    if (isinstance(amount, bool) or not isinstance(amount, (int, float))
+            or not math.isfinite(amount) or amount <= 0):
+        raise HTTPException(status_code=400, detail="Amount must be a number greater than 0")
+    return quantity, amount
+
+
 @router.post("/approve")
 def approve_action(payload: ApprovalRequest, db: Session = Depends(get_db), ctx=Depends(get_tenant_ctx)):
     """
@@ -117,10 +135,13 @@ def approve_action(payload: ApprovalRequest, db: Session = Depends(get_db), ctx=
         if action.tool_name == "purchase_order_approval":
             if not payload.manual_fields or "quantity" not in payload.manual_fields or "amount" not in payload.manual_fields:
                 raise HTTPException(status_code=400, detail="Quantity and amount are required for PO approval")
-                
-            # Combine the AI's draft reasoning with the human's hard numbers
+            quantity, amount = _usable_po_figures(payload.manual_fields)
+
+            # Combine the AI's draft reasoning with the human's hard numbers.
+            # Only the two figures are merged — any other key in manual_fields
+            # could otherwise overwrite the AI's draft in the approved record.
             final_output = dict(action.draft_output or {})
-            final_output.update(payload.manual_fields)
+            final_output.update({"quantity": quantity, "amount": amount})
             action.final_output = final_output
             # No real external send in the prototype — approval IS the send, so
             # go straight to `executed` rather than parking at `approved`.
