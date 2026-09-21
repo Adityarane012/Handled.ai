@@ -49,7 +49,11 @@ class AgentActionResponse(BaseModel):
     department_id: Optional[UUID] = None
     draft_output: Optional[Any] = None
     final_output: Optional[Any] = None
+    requested_by: Optional[UUID] = None
     approved_by: Optional[UUID] = None
+    requested_by_name: Optional[str] = None
+    approved_by_name: Optional[str] = None
+    decision_note: Optional[str] = None
     approved_at: Optional[datetime] = None
     created_at: datetime
 
@@ -59,6 +63,9 @@ class ApprovalRequest(BaseModel):
     action_id: str
     manual_fields: Optional[dict] = None  # e.g. {"quantity": 100, "amount": 50000}
     decision: str = Field(..., pattern="^(approved|rejected)$")
+    # Why they decided this. Optional — the prototype never blocks a decision
+    # on it — but recorded permanently alongside the rest of the action.
+    note: Optional[str] = Field(None, max_length=2000)
 
 
 # ─── Ops Tool Requests ─────────────────────────────────────────────────────

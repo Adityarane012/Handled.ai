@@ -1,6 +1,87 @@
 # Handled.ai Progress Report
 **Date:** 2026-08-27 (Week 4 wrap-up)
 
+## Update — 2026-09-19: audit trail, analytics, injection hardening, evals
+
+Five pushes (`4c78a6a`, `4c68080`, `1d77051` and the two fix commits before them).
+
+- **History screen + `GET /ops/history`.** The app could only show *pending*
+  approvals — nothing surfaced what ran automatically or what was already
+  approved/rejected, i.e. the tiered-autonomy story was invisible. Now: every
+  action, bucket + status badges, per-bucket filters.
+- **Dashboard analytics + `GET /ops/stats`.** Replaces two near-static cards.
+  Aggregates in SQL: per-bucket and per-status counts, `hands_off_rate` (share
+  that never needed a human) and `rejection_rate` (of decisions actually made —
+  evidence approval isn't a rubber stamp). Both null rather than 0 when there's
+  nothing to divide by, so the UI shows "—" not a misleading 0%.
+- **`seed_demo.py`** (Plan §4.1): two companies for the live isolation demo, a
+  realistic fastener/bearing inventory doc, and a deliberate mix of finished
+  history and *pending* approvals so the flagship manual-entry moment is still
+  live to perform. Runs through the real API in ~50s, so seeded rows hold
+  genuine model output — which doubles as the §4 fallback if a live call fails.
+- **`docs/Demo_Script.md`** (Plan §4.2): rehearsable 8–10 min walkthrough with
+  what to say during the ~10s generation gaps, plus the documented fallback
+  plan the Phase 4 exit criteria require.
+- **Prompt-injection hardening.** Uploaded documents are attacker-reachable, so
+  retrieved passages are now fenced (BEGIN/END markers, delimiter neutralised
+  inside the payload, task restated after the data). Measured against the
+  unfenced baseline: **17/18 → 18/18**. The baseline miss was real — an
+  injected record made the model report a stock figure of "9999" instead of 46
+  in 2 of 3 runs. Small sample; evidence, not a statistical claim.
+- **Department routing made real.** `arch.md` §4 claims adding a department is
+  "adding rows to this table", but `run_tool` hard-coded `type == "ops"` — a
+  second department's audit rows would have filed under Ops. Department now
+  comes from the tool's registry row; tests prove the unchanged engine handles
+  a second-department tool correctly.
+- **Evals added.** `eval_injection.py` and `eval_ops_quality.py`. The latter
+  addresses the Plan §5.3 gap: training used all 600 synthetic examples with
+  no held-out split, so there was no eval loop at all.
+
+Tests: pytest **27/27**, `test_rls_manual.py` **7/7**.
+
+### Later the same day — app depth + polish
+
+- **Action detail view.** History rows open the full record: which tier applied
+  and that it was fixed in code rather than chosen by the model, the agent's
+  output, *what the human typed in* as its own section, the trail, and the raw
+  stored row (so "drafts are never overwritten" can be shown, not asserted).
+  `/ops/history` gained `requested_by_name` / `approved_by_name` — an audit
+  trail that renders UUIDs isn't much of an audit trail.
+- **Approval card reworked** — draft and human-entered figures are visually
+  separate, with a confirmation line restating the commitment in the human's
+  own numbers before the button, and a disabled Approve that explains itself.
+- **`decision_note`** — why a human approved or rejected, stored permanently.
+  "Rejected" alone is a weak record six months later.
+- **First-run empty states** — a new company sees the three tiers explained
+  rather than a grid of zeros. It's the first screen a reviewer sees if they
+  sign up themselves.
+- **Inter vendored** (4 weights + OFL licence), and every analyzer lint
+  cleared: `flutter analyze` reports **No issues found!** (was 24).
+- **`flutter test` 17** — the approve-gating rule pulled out to
+  `manualFiguresAreUsable()` and covered against its own past regression
+  ("abc" parsed to 0 and could still be approved), plus widget tests that
+  render the audit dialog for each tool shape. These exist because UI was
+  being changed without anyone clicking through it, and `flutter build` only
+  proves it compiles.
+
+Tests after this pass: pytest **34/34**, flutter test **17/17**.
+
+### Still open
+- **Model quality on PO drafts** — see the behavioural eval; the fine-tune
+  sometimes restates figures loosely and has produced a wrong part code
+  (`B55` → `B52`) at least once. Part codes on an approved PO are a real-world
+  wrong-order risk. Worth a dataset pass before the review.
+- Visual polish (Inter font is still un-vendored; `withOpacity` deprecations).
+- Second department as a *shipped* module is deliberately still Phase 6 — only
+  the engine's department-agnosticism has been proven, not an HR/procurement UI.
+
+## Update — 2026-08-31: DB migration applied, real generation confirmed, docs de-staled
+
+- **DB schema migration #1–5 applied** to the live `handled_dev` DB and pushed (`605b9f8`): `agent_action.requested_by`, `UNIQUE(company_id, type)` on `department`, index on `agent_action(company_id, status)`, RLS policy on `company`, approve now flips straight `pending_approval` → `executed` (no intermediate `approved` state — approval IS the send in this prototype). Verified via `pytest` (15/15) and `test_rls_manual.py` (7/7) before pushing.
+- **Real LLM generation confirmed working end-to-end** — `handled-ops` (the QLoRA fine-tune from the 2026-08-30 session, commit `3b3ebcb`) is pulled into Ollama and set as `LLM_MODEL`. Smoke test: signup → login → `POST /ops/status-summary` returned real generated bullet-point text (~10s/call), not fallback.
+- **Two "known issues" turned out to already be fixed**, just not logged: `inventory_qa`'s distance cutoff (`agent/rag.py::_MAX_DISTANCE`) shipped with the QLoRA commit; `dashboard_shell.dart`'s stat cards already call `/ops/approvals` for a real pending count (not the old placeholder literals). Updated `CLAUDE.md`'s "Known issues" section to drop stale entries so they don't get re-proposed.
+- **Still open:** Week 7–8 demo prep (seed data, walkthrough script, rehearsals) — not started.
+
 ## Update — 2026-08-27: Phase 2 / Week 4 complete + local-LLM switch
 
 ### LLM: switched to local Ollama (no-cost phase)

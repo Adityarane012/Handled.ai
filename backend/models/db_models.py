@@ -5,7 +5,8 @@ Maps directly to the schema in arch.md §2.4 / Implementation_Plan.md §1.2.
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import (
-    Column, String, Integer, Boolean, DateTime, ForeignKey, Text, CheckConstraint
+    Column, String, Integer, Boolean, DateTime, ForeignKey, Text, CheckConstraint,
+    UniqueConstraint, Index
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, declarative_base
@@ -57,6 +58,10 @@ class Department(Base):
     active = Column(Boolean, default=True)
     activated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
+    __table_args__ = (
+        UniqueConstraint("company_id", "type", name="uq_department_company_type"),
+    )
+
     # Relationships
     company = relationship("Company", back_populates="departments")
     actions = relationship("AgentAction", back_populates="department")
@@ -73,7 +78,12 @@ class AgentAction(Base):
     status = Column(Text, nullable=False, default="drafted")
     draft_output = Column(JSONB)
     final_output = Column(JSONB)
+    requested_by = Column(UUID(as_uuid=True), ForeignKey("app_user.id"))
     approved_by = Column(UUID(as_uuid=True), ForeignKey("app_user.id"))
+    # Why the human decided what they decided. Optional, but the audit trail
+    # is much weaker without it: "this PO was rejected" is far less use six
+    # months later than "rejected — vendor unapproved, use Nandi instead".
+    decision_note = Column(Text)
     approved_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
@@ -86,9 +96,22 @@ class AgentAction(Base):
             "status IN ('drafted', 'auto_executed', 'pending_approval', 'approved', 'rejected', 'executed')",
             name="valid_status"
         ),
+        Index("ix_agent_action_company_status", "company_id", "status"),
     )
 
     # Relationships
     company = relationship("Company", back_populates="actions")
     department = relationship("Department", back_populates="actions")
+    requester = relationship("AppUser", foreign_keys=[requested_by])
     approver = relationship("AppUser", foreign_keys=[approved_by])
+
+    # An audit trail that reads as UUIDs isn't much of an audit trail. These
+    # surface the names for the API response; callers that return many rows
+    # should joinedload(requester, approver) to avoid an N+1.
+    @property
+    def requested_by_name(self) -> str | None:
+        return self.requester.name if self.requester else None
+
+    @property
+    def approved_by_name(self) -> str | None:
+        return self.approver.name if self.approver else None

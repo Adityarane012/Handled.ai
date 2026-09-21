@@ -9,14 +9,17 @@ Adding a tool = adding a row here with an explicit human decision.
 TOOL_REGISTRY = {
     "ops_status_summary": {
         "action_type": "auto",
+        "department": "ops",
         "description": "Summarizes task/workflow status from raw activity logs",
     },
     "inventory_qa": {
         "action_type": "auto",
+        "department": "ops",
         "description": "Answers stock/inventory questions, RAG-grounded against the company's own inventory records",
     },
     "vendor_status_update": {
         "action_type": "template_restricted",
+        "department": "ops",
         "description": "Delay/status notification to a vendor using pre-approved templates",
         "templates": {
             "delay_notification_v1": {
@@ -39,11 +42,13 @@ TOOL_REGISTRY = {
     },
     "purchase_order_approval": {
         "action_type": "approval_required",
+        "department": "ops",
         "description": "AI drafts a PO when a reorder trigger fires; Department Head must manually type quantity and amount",
         "manual_fields": ["quantity", "amount"],
     },
     "workflow_exception_approval": {
         "action_type": "approval_required",
+        "department": "ops",
         "description": "Agent evaluates a request against SOP limits, flags/drafts reasoning when it's an exception",
     },
 }

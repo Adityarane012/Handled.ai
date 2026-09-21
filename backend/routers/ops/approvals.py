@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, timezone
 
 from db.session import get_db
@@ -8,6 +9,80 @@ from models.schemas import ApprovalRequest, AgentActionResponse
 from models.db_models import AgentAction
 
 router = APIRouter()
+
+
+@router.get("/stats")
+def action_stats(db: Session = Depends(get_db), ctx=Depends(get_tenant_ctx)):
+    """
+    Aggregate counts for the dashboard — the tiered-autonomy model expressed
+    in numbers rather than prose: how much ran without a human, how much
+    needed one, and what the human actually decided when asked.
+
+    Counts are grouped in SQL rather than pulled into Python so this stays
+    cheap as the audit trail grows.
+    """
+    by_bucket = dict(
+        db.query(AgentAction.action_type, func.count(AgentAction.id))
+        .filter(AgentAction.company_id == ctx.company_id)
+        .group_by(AgentAction.action_type)
+        .all()
+    )
+    by_status = dict(
+        db.query(AgentAction.status, func.count(AgentAction.id))
+        .filter(AgentAction.company_id == ctx.company_id)
+        .group_by(AgentAction.status)
+        .all()
+    )
+
+    total = sum(by_bucket.values())
+    # "Ran without a human" = the auto + template buckets. Approval-required
+    # actions always cost a human a decision, by design.
+    hands_off = by_bucket.get("auto", 0) + by_bucket.get("template_restricted", 0)
+    approved = by_status.get("executed", 0)
+    rejected = by_status.get("rejected", 0)
+    decided = approved + rejected
+
+    return {
+        "total_actions": total,
+        "by_bucket": {
+            "auto": by_bucket.get("auto", 0),
+            "template_restricted": by_bucket.get("template_restricted", 0),
+            "approval_required": by_bucket.get("approval_required", 0),
+        },
+        "by_status": by_status,
+        "pending_approval": by_status.get("pending_approval", 0),
+        "approved": approved,
+        "rejected": rejected,
+        # Share of all actions that never needed a human. None (not 0) when
+        # there's nothing to divide by, so the UI can show "—" instead of a
+        # misleading 0%.
+        "hands_off_rate": round(hands_off / total, 3) if total else None,
+        # Of the decisions a human actually made, how many they rejected —
+        # evidence the approval step is real judgment, not rubber-stamping.
+        "rejection_rate": round(rejected / decided, 3) if decided else None,
+    }
+
+@router.get("/history", response_model=list[AgentActionResponse])
+def list_action_history(db: Session = Depends(get_db), ctx=Depends(get_tenant_ctx), limit: int = 200):
+    """
+    Full audit trail for the current company — every agent_action row
+    regardless of bucket or status, newest first. Unlike /approvals (pending
+    only), this is what makes the tiered-autonomy story visible: what ran
+    automatically, what went out under a template, and what a human
+    approved/rejected.
+    """
+    # joinedload so rendering "requested by / approved by" names doesn't fire
+    # a query per row.
+    actions = (
+        db.query(AgentAction)
+        .options(joinedload(AgentAction.requester), joinedload(AgentAction.approver))
+        .filter(AgentAction.company_id == ctx.company_id)
+        .order_by(AgentAction.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return actions
 
 @router.get("/approvals", response_model=list[AgentActionResponse])
 def list_pending_approvals(db: Session = Depends(get_db), ctx=Depends(get_tenant_ctx)):
@@ -47,16 +122,22 @@ def approve_action(payload: ApprovalRequest, db: Session = Depends(get_db), ctx=
             final_output = dict(action.draft_output or {})
             final_output.update(payload.manual_fields)
             action.final_output = final_output
-            action.status = "approved"
-            
+            # No real external send in the prototype — approval IS the send, so
+            # go straight to `executed` rather than parking at `approved`.
+            action.status = "executed"
+
         else:
             action.final_output = action.draft_output
-            action.status = "approved"
+            action.status = "executed"
             
     elif payload.decision == "rejected":
         action.status = "rejected"
-        
+
     action.approved_by = ctx.user_id
+    # Recorded for both outcomes, not just rejections — "approved because the
+    # vendor confirmed the price" is worth keeping too.
+    if payload.note and payload.note.strip():
+        action.decision_note = payload.note.strip()
     action.approved_at = datetime.utcnow()
     
     db.commit()

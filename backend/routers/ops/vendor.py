@@ -22,7 +22,7 @@ def draft_vendor_update(
     immediately; if a template field is missing it's saved as `drafted` with an
     error instead of sending a blank notification.
     """
-    action = run_tool("vendor_status_update", payload.dict(), ctx.company_id, db)
+    action = run_tool("vendor_status_update", payload.dict(), ctx.company_id, db, requested_by=ctx.user_id)
     return {
         "id": str(action.id),
         "status": action.status,

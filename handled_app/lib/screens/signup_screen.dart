@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
+import '../services/api_service.dart';
 import '../theme.dart';
 
 class SignupScreen extends StatefulWidget {
-  const SignupScreen({Key? key}) : super(key: key);
+  const SignupScreen({super.key});
 
   @override
   State<SignupScreen> createState() => _SignupScreenState();
@@ -21,7 +22,28 @@ class _SignupScreenState extends State<SignupScreen> {
   String? _errorMessage;
   bool _isSigningUp = false;
 
+  /// Checked before sending. The backend enforces these too (Pydantic), but a
+  /// 422 round-trip is a poor way to learn the password was too short — and
+  /// that is exactly how it used to surface.
+  String? _validate() {
+    if (_companyNameController.text.trim().isEmpty) return 'Company name is required.';
+    if (_ownerNameController.text.trim().isEmpty) return 'Your full name is required.';
+    final email = _emailController.text.trim();
+    if (email.isEmpty) return 'Work email is required.';
+    if (!email.contains('@') || !email.contains('.')) return "That doesn't look like an email address.";
+    if (_passwordController.text.length < 8) {
+      return 'Password must be at least 8 characters.';
+    }
+    return null;
+  }
+
   void _handleSignup() async {
+    final problem = _validate();
+    if (problem != null) {
+      setState(() => _errorMessage = problem);
+      return;
+    }
+
     setState(() {
       _errorMessage = null;
       _isSigningUp = true;
@@ -37,9 +59,12 @@ class _SignupScreenState extends State<SignupScreen> {
       });
       if (mounted) context.go('/');
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Failed to sign up. Please check your details.';
-      });
+      // Guarded like the finally below: the await can outlive this screen.
+      if (mounted) {
+        setState(() {
+          _errorMessage = ApiService.friendlyError(e);
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -86,9 +111,9 @@ class _SignupScreenState extends State<SignupScreen> {
                     padding: const EdgeInsets.all(12),
                     margin: const EdgeInsets.only(bottom: 24),
                     decoration: BoxDecoration(
-                      color: Colors.redAccent.withOpacity(0.1),
+                      color: Colors.redAccent.withValues(alpha: 0.1),
                       border: Border.all(
-                        color: Colors.redAccent.withOpacity(0.5),
+                        color: Colors.redAccent.withValues(alpha: 0.5),
                       ),
                       borderRadius: BorderRadius.circular(6),
                     ),
@@ -138,8 +163,13 @@ class _SignupScreenState extends State<SignupScreen> {
                 const SizedBox(height: 16),
                 TextField(
                   controller: _passwordController,
-                  decoration: const InputDecoration(labelText: 'Password'),
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    helperText: 'At least 8 characters',
+                    helperStyle: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                  ),
                   obscureText: true,
+                  onSubmitted: (_) => _isSigningUp ? null : _handleSignup(),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(

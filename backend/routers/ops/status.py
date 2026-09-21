@@ -37,7 +37,7 @@ def ops_status_summary(
                 for a in recent
             )
 
-    action = run_tool("ops_status_summary", {"activity_log": activity_log}, ctx.company_id, db)
+    action = run_tool("ops_status_summary", {"activity_log": activity_log}, ctx.company_id, db, requested_by=ctx.user_id)
     return {
         "id": str(action.id),
         "status": action.status,

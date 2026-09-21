@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
+import '../services/api_service.dart';
 import '../theme.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -30,9 +31,12 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       if (mounted) context.go('/');
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Invalid email or password. Please try again.';
-      });
+      // Guarded like the finally below: the await can outlive this screen.
+      if (mounted) {
+        setState(() {
+          _errorMessage = ApiService.friendlyError(e);
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -75,12 +79,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
               if (_errorMessage != null)
                 Container(
+                  key: const Key('login-error'),
                   padding: const EdgeInsets.all(12),
                   margin: const EdgeInsets.only(bottom: 24),
                   decoration: BoxDecoration(
-                    color: Colors.redAccent.withOpacity(0.1),
+                    color: Colors.redAccent.withValues(alpha: 0.1),
                     border: Border.all(
-                      color: Colors.redAccent.withOpacity(0.5),
+                      color: Colors.redAccent.withValues(alpha: 0.5),
                     ),
                     borderRadius: BorderRadius.circular(6),
                   ),
@@ -103,6 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 controller: _passwordController,
                 decoration: const InputDecoration(labelText: 'Password'),
                 obscureText: true,
+                onSubmitted: (_) => _isLoggingIn ? null : _handleLogin(),
               ),
               const SizedBox(height: 24),
               ElevatedButton(

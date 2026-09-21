@@ -14,6 +14,123 @@ def _rows(admin_conn, company_id):
     ), {"c": company_id}).fetchall()
 
 
+def test_decision_note_is_recorded_for_both_outcomes(client, make_company):
+    """
+    "Rejected" alone is a weak audit record. The reason the human gave is kept
+    permanently alongside the action, for approvals as well as rejections.
+    """
+    co = make_company()
+    H = co["headers"]
+
+    rejected = client.post("/ops/purchase-order",
+                           json={"item_name": "Bolt", "current_stock": 2}, headers=H).json()["id"]
+    client.post("/ops/approve", json={
+        "action_id": rejected, "decision": "rejected",
+        "note": "  Vendor not approved this quarter - use Nandi instead.  ",
+    }, headers=H)
+
+    approved = client.post("/ops/purchase-order",
+                           json={"item_name": "Nut", "current_stock": 1}, headers=H).json()["id"]
+    client.post("/ops/approve", json={
+        "action_id": approved, "decision": "approved",
+        "manual_fields": {"quantity": 10, "amount": 500.0},
+        "note": "Price confirmed by phone.",
+    }, headers=H)
+
+    by_id = {r["id"]: r for r in client.get("/ops/history", headers=H).json()}
+    # Stored trimmed, and reaches the client that renders the trail.
+    assert by_id[rejected]["decision_note"] == "Vendor not approved this quarter - use Nandi instead."
+    assert by_id[approved]["decision_note"] == "Price confirmed by phone."
+
+
+def test_decision_note_is_optional_and_blank_is_not_stored(client, make_company):
+    """A decision is never blocked on writing a note — it just stays null."""
+    co = make_company()
+    H = co["headers"]
+
+    no_note = client.post("/ops/purchase-order",
+                          json={"item_name": "Washer", "current_stock": 4}, headers=H).json()["id"]
+    r = client.post("/ops/approve", json={"action_id": no_note, "decision": "rejected"}, headers=H)
+    assert r.status_code == 200
+
+    blank = client.post("/ops/purchase-order",
+                        json={"item_name": "Gasket", "current_stock": 4}, headers=H).json()["id"]
+    client.post("/ops/approve", json={
+        "action_id": blank, "decision": "rejected", "note": "   ",
+    }, headers=H)
+
+    by_id = {r["id"]: r for r in client.get("/ops/history", headers=H).json()}
+    assert by_id[no_note]["decision_note"] is None
+    # Whitespace-only is not a reason; don't pretend one was given.
+    assert by_id[blank]["decision_note"] is None
+
+
+def test_stats_counts_buckets_and_decision_rates(client, make_company):
+    co = make_company()
+    H = co["headers"]
+
+    client.post("/ops/status-summary", json={}, headers=H)   # auto
+    client.post("/ops/vendor-status", json={                  # template_restricted
+        "vendor_name": "Acme", "template_key": "delivery_confirmed_v1",
+        "details": {"vendor_name": "Acme", "order_ref": "1", "delivery_date": "2026-09-01", "company_name": "Co"},
+    }, headers=H)
+    approved = client.post("/ops/purchase-order",             # approval -> approved
+                           json={"item_name": "Bolt", "current_stock": 2}, headers=H).json()["id"]
+    client.post("/ops/approve", json={
+        "action_id": approved, "decision": "approved",
+        "manual_fields": {"quantity": 5, "amount": 100.0},
+    }, headers=H)
+    rejected = client.post("/ops/workflow-exception",         # approval -> rejected
+                           json={"request_description": "x", "justification": "y"}, headers=H).json()["id"]
+    client.post("/ops/approve", json={"action_id": rejected, "decision": "rejected"}, headers=H)
+    client.post("/ops/purchase-order",                        # approval -> left pending
+                json={"item_name": "Nut", "current_stock": 1}, headers=H)
+
+    s = client.get("/ops/stats", headers=H).json()
+    assert s["total_actions"] == 5
+    assert s["by_bucket"] == {"auto": 1, "template_restricted": 1, "approval_required": 3}
+    assert s["approved"] == 1 and s["rejected"] == 1 and s["pending_approval"] == 1
+    # 2 of 5 actions never needed a human
+    assert s["hands_off_rate"] == 0.4
+    # of the 2 decisions actually made, 1 was a rejection
+    assert s["rejection_rate"] == 0.5
+
+
+def test_stats_are_null_not_zero_when_there_is_no_data(client, make_company):
+    """A fresh company should read '—', not a misleading 0%."""
+    s = client.get("/ops/stats", headers=make_company()["headers"]).json()
+    assert s["total_actions"] == 0
+    assert s["hands_off_rate"] is None
+    assert s["rejection_rate"] is None
+
+
+def test_history_returns_every_bucket_and_status(client, make_company, admin_conn):
+    co = make_company()
+    H = co["headers"]
+
+    client.post("/ops/status-summary", json={}, headers=H)  # auto
+    client.post("/ops/vendor-status", json={                 # template_restricted
+        "vendor_name": "Acme", "template_key": "delivery_confirmed_v1",
+        "details": {"vendor_name": "Acme", "order_ref": "1", "delivery_date": "2026-09-01", "company_name": "Co"},
+    }, headers=H)
+    pid = client.post("/ops/purchase-order",                 # approval_required
+                       json={"item_name": "Bolt", "current_stock": 2}, headers=H).json()["id"]
+    client.post("/ops/approve", json={
+        "action_id": pid, "decision": "approved",
+        "manual_fields": {"quantity": 5, "amount": 999.0},
+    }, headers=H)
+
+    history = client.get("/ops/history", headers=H).json()
+    tools = {row["tool_name"] for row in history}
+    assert tools == {"ops_status_summary", "vendor_status_update", "purchase_order_approval"}
+    statuses = {row["tool_name"]: row["status"] for row in history}
+    assert statuses["ops_status_summary"] == "auto_executed"
+    assert statuses["vendor_status_update"] == "auto_executed"
+    assert statuses["purchase_order_approval"] == "executed"
+    # newest first
+    assert history == sorted(history, key=lambda r: r["created_at"], reverse=True)
+
+
 def test_every_tool_writes_one_agent_action_row(client, make_company, admin_conn):
     co = make_company()
     H = co["headers"]
@@ -93,7 +210,7 @@ def test_approve_merges_manual_fields_without_losing_draft(client, make_company,
     row = admin_conn.execute(text(
         "SELECT status, draft_output, final_output FROM agent_action WHERE id = :i"),
         {"i": pid}).fetchone()
-    assert row[0] == "approved"
+    assert row[0] == "executed"
     assert row[1] == draft_before                      # draft still intact
     assert row[2]["quantity"] == 250                   # human's numbers recorded
     assert row[2]["amount"] == 9999.5

@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 
-/// Typeface. To use Inter, drop Inter-*.ttf into assets/fonts/, declare the
-/// family in pubspec.yaml, and set this to 'Inter'. Left null for now so the
-/// app builds with the bundled default (google_fonts was removed — its
-/// transitive path_provider/objective_c hook breaks on spaces in the home path).
-const String? _fontFamily = null;
+/// Typeface. Inter is vendored in assets/fonts/ and declared in pubspec.yaml
+/// rather than pulled through google_fonts — that package's transitive
+/// path_provider/objective_c hook breaks on spaces in the home path, which is
+/// why it was removed. Set to null to fall back to the platform default.
+///
+/// Deliberately nullable: ThemeData.fontFamily takes String?, and null is a
+/// supported setting here, so the nullability is the point rather than an
+/// oversight.
+// ignore: unnecessary_nullable_for_final_variable_declarations
+const String? _fontFamily = 'Inter';
 
 class AppTheme {
   // Linear-inspired minimal dark palette

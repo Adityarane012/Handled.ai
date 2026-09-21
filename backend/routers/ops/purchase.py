@@ -22,7 +22,7 @@ def draft_purchase_order(
     the Department Head types them in the approval queue (core safety rule).
     Row is persisted as `pending_approval`.
     """
-    action = run_tool("purchase_order_approval", payload.dict(), ctx.company_id, db)
+    action = run_tool("purchase_order_approval", payload.dict(), ctx.company_id, db, requested_by=ctx.user_id)
     return {
         "id": str(action.id),
         "status": action.status,

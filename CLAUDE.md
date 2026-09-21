@@ -43,7 +43,7 @@ backend/
     company.py             /company/signup — creates company + owner_admin + active Ops dept
     ops/
       purchase.py          POST /ops/purchase-order      (approval_required)
-      approvals.py         GET /ops/approvals, POST /ops/approve
+      approvals.py         GET /ops/approvals, POST /ops/approve, GET /ops/history, GET /ops/stats
       status.py            POST /ops/status-summary      (auto)
       inventory.py         POST /ops/inventory-upload, POST /ops/inventory-qa  (auto/RAG)
       vendor.py            POST /ops/vendor-status       (template_restricted)
@@ -65,26 +65,47 @@ backend/
     rls_setup.py           apply_rls() — idempotent policy DDL
   init_db.py               create tables + apply RLS
   test_rls_manual.py       raw-SQL cross-tenant isolation proof (fixtures via admin, asserts via runtime role)
+  seed_demo.py             Phase 4.1 demo data — 2 companies via the real API (~50s), leaves 2
+                           approvals PENDING on purpose for the live demo moment
+  eval_injection.py        prompt-injection harness for inventory_qa; --compare scores the
+                           pre-fencing prompt against the current one
+  eval_ops_quality.py      behavioural eval vs the product's safety claims (PO figure
+                           suppression, grounded refusal, no invented numbers/part codes)
   pytest.ini               testpaths=tests
-  tests/                   Phase 3 hardening — `..\venv\Scripts\python -m pytest` (run from backend/)
+  tests/                   `..\venv\Scripts\python -m pytest` (run from backend/) — 27 tests
     conftest.py            in-process app + Postgres; stubs agent.crew._generate (@real_llm opts out)
     test_tenant_isolation.py   Phase 3.1 adversarial cross-tenant (API + RLS-alone)
-    test_audit_log.py          Phase 3.3 every tool writes a row; reject/approve preserve the draft
+    test_audit_log.py          Phase 3.3 audit integrity + /ops/history + /ops/stats
     test_cost_controls.py      Phase 3.2 CREW_MAX_ITER/RPM loaded + applied; failure path bounded
+    test_prompt_injection.py   untrusted RAG/log content is fenced, guarded, task restated after
+    test_department_agnostic.py  a runtime-registered 2nd-department tool routes correctly
 
 handled_app/               Flutter (windows + web are the built platforms)
   lib/
     main.dart              go_router config, auth redirect, ShellRoute
     providers/auth_provider.dart   JWT in shared_preferences, /auth/me check
     services/api_service.dart      ApiService.get/post, baseUrl http://127.0.0.1:8000
+    ops_labels.dart                shared bucket/status labels + colours, OpsBadge, StatCard, and
+                                   manualFiguresAreUsable() — the approve-gating rule, kept as a
+                                   pure function so it's unit-testable rather than in a build method
     screens/
       login_screen.dart, signup_screen.dart
-      dashboard_shell.dart         sidebar nav (/ , /ops, /approvals) + DashboardPlaceholder
-                                   (real pending-approvals count + quick links)
+      dashboard_shell.dart         sidebar nav (/ , /ops, /approvals, /history) + DashboardPlaceholder
+                                   (autonomy analytics off /ops/stats + by-bucket breakdown)
       ops_tools_screen.dart        /ops — one card per tool, grouped by bucket; triggers all 5
                                    endpoints + inventory-doc upload; inline results
       approval_queue_screen.dart   pending list + _ApprovalCard with manual quantity/amount fields
-    theme.dart                     AppTheme dark theme (bundled font; _fontFamily switch for Inter)
+      history_screen.dart          /history — full audit trail, bucket/status badges, filters;
+                                   rows open action_detail.dart
+      action_detail.dart           showActionDetail() — full record for one action: tier + why,
+                                   agent output, what the human typed, trail (who/when/why), raw row
+    theme.dart                     AppTheme dark theme; _fontFamily = 'Inter' (vendored in
+                                   assets/fonts/, four weights + OFL licence — not google_fonts)
+  test/                            `flutter test` — 17 tests
+    approval_rules_test.dart       the approve-gating safety rule + tier/status wording coverage
+    action_detail_test.dart        renders the audit dialog for each tool shape (catches the
+                                   loosely-typed-JSON render errors `flutter build` can't)
+    widget_test.dart               unauthenticated launch lands on login
 
 docs/                      Source of truth for scope & decisions (see below)
 ```
@@ -95,7 +116,7 @@ docs/                      Source of truth for scope & decisions (see below)
 - **Backend:** `cd backend && ..\venv\Scripts\uvicorn main:app --reload` → http://localhost:8000 (`/health`, `/docs`).
 - **DB:** local Postgres, db `handled_dev`. Runtime connects as non-superuser `handled_app` (RLS enforced); all DDL (`init_db.py`, `rls_setup.py`, startup `create_all`) uses the `postgres` superuser via `admin_engine`. Both URLs in `backend/.env`.
 - **First-time DB setup:** `python init_db.py` then `python test_rls_manual.py` (must pass before building on top).
-- **LLM — local Ollama, fine-tuned model:** `.env` has `LLM_PROVIDER=ollama`, `LLM_MODEL=handled-ops`, `OLLAMA_BASE_URL=http://localhost:11434`. `handled-ops:latest` is a fine-tuned Qwen2.5-3B (QLoRA, from `backend/training/`) registered in Ollama from `backend/training/models/handled-ops-qwen2.5-3b/handled-ops-qwen2.5-3b.Q4_K_M.gguf` (gitignored; `ollama create handled-ops -f Modelfile` in that dir). Start Ollama (installed at `C:\Users\Aditya Rane\AppData\Local\Programs\Ollama\ollama.EXE`) before running the backend. Fallbacks: `LLM_MODEL=llama3.2` (base, `ollama pull llama3.2`) or flip `LLM_PROVIDER` to `anthropic`/`openai`/`gemini` + key for a hosted model. If Ollama is down or the model is missing, tools return labelled fallback text — the app still works.
+- **LLM — local Ollama (no-cost phase):** `.env` has `LLM_PROVIDER=ollama`, `LLM_MODEL=llama3.2`, `OLLAMA_BASE_URL=http://localhost:11434`. To get real generation: start Ollama (installed at `C:\Users\Aditya Rane\AppData\Local\Programs\Ollama\ollama.EXE`) and `ollama pull llama3.2` (or a smaller tag like `llama3.2:1b` / `qwen2.5:3b`). Until then, tools return labelled fallback text — the app still works. Flip `LLM_PROVIDER` back to `anthropic`/`openai`/`gemini` + set the key to use a hosted model.
 - **`inventory_qa` RAG:** first call downloads the MiniLM ONNX embedding model (~80 MB, one-time, then offline). Vectors persist in `backend/.chroma/` (gitignored).
 - **Flutter:** `cd handled_app && flutter run -d windows` (or `-d chrome`). SDK at `C:\Users\Aditya Rane\flutter`.
 - **CrewAI caps:** `CREW_MAX_ITER=6`, `CREW_MAX_RPM=10`, `LLM_MONTHLY_SPEND_CAP_USD=20` (only relevant on a paid provider).
@@ -112,35 +133,42 @@ docs/                      Source of truth for scope & decisions (see below)
 
 ## Known issues / not yet done (as of 2026-08-31)
 
-- **LLM generation is live on the fine-tuned local model** (`LLM_MODEL=handled-ops`). Verified end-to-end 2026-08-31 (5 tools via API + Flutter UI; PO draft correctly omits quantity/price). Ollama must be running; if it's down, tools fall back to labelled text.
 - **`flutter run -d windows` needs Windows Developer Mode ON** (plugin symlink support) — `start ms-settings:developers`. `-d chrome` / `build web` are unaffected.
 - `google_fonts` was removed (its `objective_c` native-assets hook breaks on the space in `C:\Users\Aditya Rane\`). Theme uses the bundled default font; flip `_fontFamily` in `theme.dart` to `'Inter'` after vendoring `Inter-*.ttf` into `assets/fonts/` + declaring it in `pubspec.yaml`.
-- **`inventory_qa` distance threshold** ✅ added (`RAG_MAX_DISTANCE`, default 1.1, in `agent/rag.py::retrieve_inventory_chunks`, commit `3b3ebcb`). But on a 3B model with a tiny single-chunk doc the answer quality is still weak — re-test against `handled-ops` with a multi-chunk doc before the demo.
-- **`tests/` is still empty** — Phase 3 adversarial cross-tenant tests not written. `scratchpad/smoke_week4.py` (in the session scratchpad) is the current stopgap; port it into `tests/` with pytest.
-- `dashboard_shell.dart` stat cards are placeholder literals (`3`, `2`, `14`); no dashboard screen calls the tool endpoints yet — only the approval queue is wired.
 - Signup/login screens not reviewed in depth.
 - `crewai` prints noisy `Failed to connect to OpenAI API` lines when Ollama is down — cosmetic; the fallback still fires.
-- Auth strategy not finalised — see below.
+- No demo seed data / rehearsed walkthrough script yet — Week 7–8 work, not started.
+- `LICENSE` — none yet; deliberate (maintainer's call).
 
-## Status (2026-08-31, Weeks 0–6 done; fine-tuned LLM wired in)
+Resolved since the 2026-08-28 pass (kept here so nobody re-proposes them): real LLM generation via the fine-tuned `handled-ops` Ollama model (confirmed end-to-end, ~10s/call); `inventory_qa` distance-cutoff (`agent/rag.py::_MAX_DISTANCE`, already shipped in the QLoRA commit); `backend/tests/` — 15 tests green; dashboard stat cards — `DashboardPlaceholder` already fetches the real pending-approvals count; DB schema migration #1–5 — applied and pushed (`605b9f8`).
+
+## Status (2026-08-28, Weeks 0–6 done)
 
 - **Weeks 0–3** ✅ regression-checked (`scratchpad/verify_w0_w3.py`): deps, DB schema, RLS (enabled + NULLIF-hardened), `/health`, signup→owner+Ops, JWT login, `/auth/me`, tenant isolation, PO tool + approval queue (400 without numbers, approved with, reject retains row), Flutter safety UI. `test_rls_manual.py` was stale (seeded fixtures over the RLS role) — **rewritten** to seed via `admin_engine` + assert over the runtime role; now passes 7/7.
 - **Phase 2 / Week 4** ✅ **all 5 Ops tools built + verified end-to-end** (smoke test: signup → 5 tools → approval queue → approve PO with manual numbers → 2nd-company isolation holds). Generic `run_tool()` dispatcher + `TOOL_REGISTRY` lookup + RAG retrieval working. Real LLM output pending Ollama.
 - **Flutter builds** — `flutter build web` → `√ Built build\web`; `flutter analyze` clean (only pre-existing infos); `flutter test` passes.
 - **Week 5** ✅ `OpsToolsScreen` (`/ops`) added — the app can now trigger all 5 tools + upload an inventory doc from the UI (previously only the approval queue was wired). Dashboard shows the real pending count.
 - **Week 6 / Phase 3** ✅ `backend/tests/` pytest suite — 15 tests green (tenant isolation, audit-log integrity, cost-control caps). Run: `cd backend && ..\venv\Scripts\python -m pytest`.
-- **Fine-tuned LLM (2026-08-31)** ✅ `backend/training/` QLoRA pipeline (Qwen2.5-3B, Unsloth) landed via `3b3ebcb`; the exported GGUF was registered as `handled-ops:latest` in Ollama and `.env` now points at it (`LLM_MODEL=handled-ops`). End-to-end re-verified: all 5 tools via API + the Flutter UI, on the fine-tuned model. This is Phase 5's generation swap done early — orchestration untouched. Still open: 5.3 eval loop, formal 5.5 sign-off.
-- **Repo** ✅ Weeks 3–6 committed as a clean linear history and **pushed to `origin/main`** (`github.com/Adityarane012/Handled.ai`). Commits: `89610f2` W3, `01dbb50` W4, `88aac71` W5, `f75da91` W6, `4c356fa` docs, `e876603` README/.env.example/.gitignore, `c2cd27a` README polish. Root `README.md` + `handled_app/README.md` + `backend/.env.example` in place. No `LICENSE` yet (deliberate — user's call).
-- **Next:** Week 7–8 demo prep (seed data, demo script, rehearsals) — see `Implementation_Plan.md` §4. LLM is live on `handled-ops` (just start Ollama before the backend). Build the 5.3 eval loop (hold-out synthetic pairs) to justify the fine-tune. Provider-side spend cap is a manual checklist item (only matters on a paid provider). Optional: the DB migration #1–5 from the schema review below.
-
-### DB schema migration #1–5 (proposed, not applied)
-
-Small migration worth doing before the demo — details in `docs/Progress.md`:
-1. `agent_action.requested_by UUID REFERENCES app_user(id)` — audit trail wants "who triggered", not just "who approved".
-2. `UNIQUE (company_id, type)` on `department` — nothing stops two `ops` rows.
-3. Index `agent_action (company_id, status)` — the approval-queue query filters on exactly this.
-4. RLS policy on `company` too (`id = NULLIF(current_setting('app.current_company_id', true), '')::UUID`) — the one tenant table with no policy; signup/login use the superuser engine so unaffected.
-5. On approve, flip status `approved` → `executed` after the (simulated) send — the `executed` state exists in the enum but is never reached.
+- **Repo** ✅ Weeks 3–6 committed as a clean linear history and **pushed to `origin/main`** (`github.com/Adityarane012/Handled.ai`). Commits: `89610f2` W3, `01dbb50` W4, `88aac71` W5, `f75da91` W6, `4c356fa` docs, `e876603` README/.env.example/.gitignore, `c2cd27a` README polish, `3b3ebcb` QLoRA fine-tuning pipeline, `605b9f8` DB migration #1–5. Root `README.md` + `handled_app/README.md` + `backend/.env.example` in place. No `LICENSE` yet (deliberate — user's call).
+- **Fine-tuned model** ✅ `handled-ops` (QLoRA on Qwen2.5-3B-Instruct) is pulled into Ollama and set as `LLM_MODEL` in `.env` (`LLM_PROVIDER=ollama`). Verified 2026-08-31: signup → login → `/ops/status-summary` returns real generated text (~10s/call), not fallback.
+- **DB migration #1–5** ✅ applied to the live `handled_dev` DB and pushed (`605b9f8`) — `agent_action.requested_by`, `department` UNIQUE(company_id, type), `agent_action(company_id, status)` index, RLS policy on `company`, approve flips straight to `executed`. Both regression suites green after: `pytest` 15/15, `test_rls_manual.py` 7/7.
+- **2026-09-19** ✅ audit trail + analytics + safety hardening (`4c78a6a`, `4c68080`, `1d77051`):
+  - `/history` screen and `GET /ops/history` — the full audit trail, which is what actually makes the three-bucket story visible (previously only *pending* approvals were shown).
+  - Dashboard analytics off `GET /ops/stats` — per-bucket/status counts, `hands_off_rate`, `rejection_rate` (null not 0 when there's no data).
+  - `seed_demo.py` (Plan §4.1) + `docs/Demo_Script.md` (Plan §4.2, incl. the required fallback plan).
+  - **Prompt-injection fencing** for RAG/log content, measured: unfenced 17/18 → fenced 18/18. The baseline miss was real (injected record made it report "9999" instead of 46 stock, 2/3 runs).
+  - **Department routing fixed** — `run_tool` hard-coded `type == "ops"`, so `arch.md` §4's "just add rows" claim wasn't true in code. Department now comes from the registry row.
+  - `eval_injection.py` + `eval_ops_quality.py` — the Plan §5.3 eval loop that training never had.
+  - pytest **27/27**, `test_rls_manual.py` 7/7.
+- **2026-09-19 (later)** ✅ app depth + polish pass (`e10f5ff` … `2912689`):
+  - **Action detail view** (`action_detail.dart`) — clicking a History row shows the tier and why it applied, the agent's output, *what the human typed in* as its own section, the trail (who triggered / who decided / when / why), and the raw stored row. `/ops/history` now returns `requested_by_name` / `approved_by_name` (joinedload'ed).
+  - **Approval card reworked** — the agent's draft and the human's figures are visually separate blocks, a confirmation line restates the commitment in the human's own numbers before the button, and a disabled Approve explains itself.
+  - **`decision_note`** — why a human approved or rejected, stored permanently and shown in the trail. Live DB migrated.
+  - **First-run empty states** — a new company gets the three tiers explained instead of a grid of zeros.
+  - **Inter vendored** (4 weights + OFL licence) and switched on; `flutter analyze` now reports **No issues found!** (was 24 lints).
+  - **`flutter test` 17** — the approve-gating rule extracted to `manualFiguresAreUsable()` and covered (incl. the "abc → 0" regression), plus widget tests that render the audit dialog for every tool shape.
+  - pytest **34/34**.
+- **Next:** rehearse the demo script end-to-end; address the PO-draft quality findings from `eval_ops_quality.py` (see Progress.md "Still open"). `docs/Status_and_Approach.md` has the per-category plan for the remaining weeks.
 
 ## Auth — decided
 

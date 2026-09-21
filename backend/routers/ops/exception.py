@@ -21,7 +21,7 @@ def evaluate_workflow_exception(
     approves anything itself — the row lands as `pending_approval` in the same
     queue the PO tool uses.
     """
-    action = run_tool("workflow_exception_approval", payload.dict(), ctx.company_id, db)
+    action = run_tool("workflow_exception_approval", payload.dict(), ctx.company_id, db, requested_by=ctx.user_id)
     return {
         "id": str(action.id),
         "status": action.status,
