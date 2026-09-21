@@ -7,11 +7,17 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = true;
   String? _userName;
   String? _userRole;
+  // Permissions come from /auth/me rather than being re-derived from the role
+  // string here — the backend owns the rule and enforces it regardless.
+  bool _canApprove = false;
+  bool _canManageTeam = false;
 
   bool get isAuthenticated => _isAuthenticated;
   bool get isLoading => _isLoading;
   String? get userName => _userName;
   String? get userRole => _userRole;
+  bool get canApprove => _canApprove;
+  bool get canManageTeam => _canManageTeam;
 
   AuthProvider() {
     _checkAuthStatus();
@@ -30,6 +36,8 @@ class AuthProvider extends ChangeNotifier {
         _isAuthenticated = true;
         _userName = userData['name'];
         _userRole = userData['role'];
+        _canApprove = userData['can_approve'] == true;
+        _canManageTeam = userData['can_manage_team'] == true;
       } catch (e) {
         // Token is invalid/expired, or the backend didn't respond in time.
         _isAuthenticated = false;
@@ -80,6 +88,8 @@ class AuthProvider extends ChangeNotifier {
     _isAuthenticated = false;
     _userName = null;
     _userRole = null;
+    _canApprove = false;
+    _canManageTeam = false;
     notifyListeners();
   }
 }

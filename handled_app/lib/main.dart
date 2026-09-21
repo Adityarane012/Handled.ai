@@ -10,6 +10,7 @@ import 'screens/dashboard_shell.dart';
 import 'screens/approval_queue_screen.dart';
 import 'screens/ops_tools_screen.dart';
 import 'screens/history_screen.dart';
+import 'screens/team_screen.dart';
 
 void main() {
   runApp(
@@ -89,6 +90,10 @@ class _HandledAppState extends State<HandledApp> {
             GoRoute(
               path: '/history',
               builder: (context, state) => const HistoryScreen(),
+            ),
+            GoRoute(
+              path: '/team',
+              builder: (context, state) => const TeamScreen(),
             ),
           ],
         ),

@@ -49,6 +49,36 @@ const kStatusColors = {
   'drafted': Colors.amber,
 };
 
+const kRoleLabels = {
+  'owner_admin': 'Owner',
+  'department_head': 'Department Head',
+  'staff': 'Staff',
+};
+
+/// What each role may do — shown next to the role so nobody has to ask.
+/// Display only: the backend enforces it (403 on /ops/approve for staff).
+const kRoleBlurbs = {
+  'owner_admin': 'Adds team members, approves, sees everything',
+  'department_head': 'Approves or rejects drafts, triggers tools',
+  'staff': 'Triggers tools and drafts work — cannot approve',
+};
+
+const kRoleColors = {
+  'owner_admin': Color(0xFFB07CF2),
+  'department_head': Colors.orange,
+  'staff': Color(0xFF5E9EFF),
+};
+
+/// "Requested by Amit · Approved by Neha" — the one line that lets a manager
+/// see whose work a row is at a glance. Empty when neither name is known.
+String trailSummary(String? requestedBy, String? decidedBy, String status) {
+  final parts = <String>[
+    if (requestedBy != null) 'Requested by $requestedBy',
+    if (decidedBy != null) '${status == 'rejected' ? 'Rejected' : 'Approved'} by $decidedBy',
+  ];
+  return parts.join(' · ');
+}
+
 /// Small rounded pill used for bucket/status tags.
 class OpsBadge extends StatelessWidget {
   final String text;

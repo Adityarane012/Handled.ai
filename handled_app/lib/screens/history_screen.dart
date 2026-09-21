@@ -199,7 +199,8 @@ class _HistoryCard extends StatelessWidget {
     final bucket = action['action_type'] as String? ?? '';
     final status = action['status'] as String? ?? '';
     final createdAt = action['created_at']?.toString();
-    final approvedByName = action['approved_by_name'] as String?;
+    final trail = trailSummary(
+        action['requested_by_name'] as String?, action['approved_by_name'] as String?, status);
     final preview = _preview();
 
     return InkWell(
@@ -240,10 +241,10 @@ class _HistoryCard extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              if (approvedByName != null)
+              if (trail.isNotEmpty)
                 Expanded(
                   child: Text(
-                    '${status == 'rejected' ? 'Rejected' : 'Approved'} by $approvedByName',
+                    trail,
                     style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
                     overflow: TextOverflow.ellipsis,
                   ),

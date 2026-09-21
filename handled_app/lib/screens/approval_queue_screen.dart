@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../agent_text.dart';
 import '../ops_labels.dart';
+import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
 
@@ -185,6 +187,11 @@ class _ApprovalCardState extends State<_ApprovalCard> {
     final canApprove = !isPO ||
         manualFiguresAreUsable(_quantityController.text, _amountController.text);
 
+    // Staff see the queue (it's their drafts in it) but can't decide. The
+    // backend 403s them regardless; this just doesn't offer a dead button.
+    final mayDecide = context.watch<AuthProvider>().canApprove;
+    final requestedBy = widget.action['requested_by_name'] as String?;
+
     final input = (draft['input'] as Map?) ?? const {};
     final itemName = input['item_name'] ?? draft['item_name'] ?? 'Unknown item';
 
@@ -218,6 +225,11 @@ class _ApprovalCardState extends State<_ApprovalCard> {
             isPO ? 'Purchase Order: $itemName' : _titleForTool(widget.action['tool_name']),
             style: Theme.of(context).textTheme.titleLarge,
           ),
+          if (requestedBy != null) ...[
+            const SizedBox(height: 4),
+            Text('Requested by $requestedBy',
+                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+          ],
           const SizedBox(height: 14),
 
           if (isPO) ...[
@@ -235,57 +247,83 @@ class _ApprovalCardState extends State<_ApprovalCard> {
             text: draft['agent_output'] ?? draft['agent_justification'] ?? 'No details provided.',
           ),
 
-          if (isPO) ...[
+          if (!mayDecide) ...[
             const SizedBox(height: 20),
-            _manualEntryBlock(context),
-          ],
-
-          const SizedBox(height: 16),
-          TextField(
-            controller: _noteController,
-            maxLines: 2,
-            decoration: const InputDecoration(
-              labelText: 'Reason for your decision (optional)',
-              hintText: 'e.g. vendor not approved this quarter — reorder from Nandi instead',
-            ),
-          ),
-
-          const SizedBox(height: 20),
-          if (isPO && canApprove) ...[
-            _confirmationLine(context),
-            const SizedBox(height: 12),
-          ],
-          Row(
-            children: [
-              if (isPO && !canApprove)
-                Expanded(
-                  child: Text(
-                    _quantityController.text.trim().isEmpty && _amountController.text.trim().isEmpty
-                        ? 'Enter both figures to enable approval.'
-                        : 'Both figures must be numbers greater than zero.',
-                    style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.9), fontSize: 11),
-                  ),
-                )
-              else
-                const Spacer(),
-              TextButton(
-                onPressed: _isSubmitting ? null : () => _submitDecision('rejected'),
-                child: const Text('Reject', style: TextStyle(color: Colors.redAccent)),
-              ),
-              const SizedBox(width: 16),
-              ElevatedButton(
-                onPressed: (_isSubmitting || !canApprove) ? null : () => _submitDecision('approved'),
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryAction),
-                child: _isSubmitting
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Approve'),
-              )
+            _viewOnlyNotice(),
+          ] else ...[
+            if (isPO) ...[
+              const SizedBox(height: 20),
+              _manualEntryBlock(context),
             ],
-          )
+
+            const SizedBox(height: 16),
+            TextField(
+              controller: _noteController,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Reason for your decision (optional)',
+                hintText: 'e.g. vendor not approved this quarter — reorder from Nandi instead',
+              ),
+            ),
+
+            const SizedBox(height: 20),
+            if (isPO && canApprove) ...[
+              _confirmationLine(context),
+              const SizedBox(height: 12),
+            ],
+            Row(
+              children: [
+                if (isPO && !canApprove)
+                  Expanded(
+                    child: Text(
+                      _quantityController.text.trim().isEmpty && _amountController.text.trim().isEmpty
+                          ? 'Enter both figures to enable approval.'
+                          : 'Both figures must be numbers greater than zero.',
+                      style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.9), fontSize: 11),
+                    ),
+                  )
+                else
+                  const Spacer(),
+                TextButton(
+                  onPressed: _isSubmitting ? null : () => _submitDecision('rejected'),
+                  child: const Text('Reject', style: TextStyle(color: Colors.redAccent)),
+                ),
+                const SizedBox(width: 16),
+                ElevatedButton(
+                  onPressed: (_isSubmitting || !canApprove) ? null : () => _submitDecision('approved'),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryAction),
+                  child: _isSubmitting
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Approve'),
+                )
+              ],
+            )
+          ],
         ],
       ),
     );
   }
+
+  Widget _viewOnlyNotice() => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.background,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: const Row(children: [
+          Icon(Icons.lock_outline, size: 15, color: AppTheme.textSecondary),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Waiting for a department head or the owner. Staff can draft this, '
+              'but only they can enter the figures and approve or reject it.',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            ),
+          ),
+        ]),
+      );
 
   Widget _fact(String label, String value) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -66,6 +66,7 @@ class DashboardShell extends StatelessWidget {
                 _buildNavItem(context, icon: Icons.bolt_outlined, label: 'Ops Tools', route: '/ops'),
                 _buildNavItem(context, icon: Icons.pending_actions_outlined, label: 'Approvals', route: '/approvals'),
                 _buildNavItem(context, icon: Icons.history_outlined, label: 'History', route: '/history'),
+                _buildNavItem(context, icon: Icons.group_outlined, label: 'Team', route: '/team'),
 
                 const Spacer(),
 
@@ -105,10 +106,10 @@ class DashboardShell extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              authProvider.userRole
-                                      ?.replaceAll('_', ' ')
-                                      .toUpperCase() ??
-                                  'STAFF',
+                              (kRoleLabels[authProvider.userRole] ??
+                                      authProvider.userRole ??
+                                      '')
+                                  .toUpperCase(),
                               style: const TextStyle(
                                 fontSize: 10,
                                 color: AppTheme.textSecondary,
