@@ -74,7 +74,7 @@ backend/
   eval_ops_quality.py      behavioural eval vs the product's safety claims (PO figure
                            suppression, grounded refusal, no invented numbers/part codes)
   pytest.ini               testpaths=tests
-  tests/                   `..\venv\Scripts\python -m pytest` (run from backend/) — 44 tests
+  tests/                   `..\venv\Scripts\python -m pytest` (run from backend/) — 45 tests
     conftest.py            in-process app + Postgres; stubs agent.crew._generate (@real_llm opts out)
     test_tenant_isolation.py   Phase 3.1 adversarial cross-tenant (API + RLS-alone)
     test_audit_log.py          Phase 3.3 audit integrity + /ops/history + /ops/stats
@@ -140,10 +140,11 @@ docs/                      Source of truth for scope & decisions (see below)
 - **Never re-add `google_fonts`** — its `objective_c` native-assets hook breaks on the space in `C:\Users\Aditya Rane\`. Inter is vendored in `assets/fonts/` instead.
 - **PO-draft quality** — the 3B fine-tune has intermittently invented a threshold and mistyped a part code (`B55` → `B52`). Contained by design (human types quantity/amount), but see `eval_ops_quality.py` + `docs/Status_and_Approach.md` §3. Don't retrain unless a `--runs 10` eval shows suite A degrading.
 - **Demo not yet rehearsed** — seed script + `docs/Demo_Script.md` exist; the Phase 4 exit criterion (2 end-to-end rehearsals + a practised Ollama-down fallback) is still open.
+- **One user per company, roles not enforced** — signup creates only an `owner_admin`; there's no invite/add-user endpoint, and `/ops/approve` never checks `ctx.role`, so the `department_head`/`staff` roles in the DB CHECK are unused. Visibility is already right for a manager: `/ops/history` is company-wide with `requested_by_name`/`approved_by_name` on every row.
 - `crewai` prints noisy `Failed to connect to OpenAI API` lines when Ollama is down — cosmetic; the fallback still fires.
 - `LICENSE` — none yet; deliberate (maintainer's call).
 
-Resolved (kept here so nobody re-proposes them): real LLM generation via the fine-tuned `handled-ops` Ollama model (~10s/call); `inventory_qa` distance-cutoff (`agent/rag.py::_MAX_DISTANCE`); `backend/tests/` (44 green); dashboard analytics off `/ops/stats`; DB schema migration #1–5 + `decision_note` (`605b9f8`, `2912689`; `migrate.py` for other machines); Inter vendored; demo seed data + script; signup/login error handling (`75e9e7b`).
+Resolved (kept here so nobody re-proposes them): real LLM generation via the fine-tuned `handled-ops` Ollama model (~10s/call); `inventory_qa` distance-cutoff (`agent/rag.py::_MAX_DISTANCE`); `backend/tests/` (45 green); dashboard analytics off `/ops/stats`; DB schema migration #1–5 + `decision_note` (`605b9f8`, `2912689`; `migrate.py` for other machines); Inter vendored; demo seed data + script; signup/login error handling (`75e9e7b`).
 
 ## Status (2026-09-21, Phases 0–3 done, Phase 4 ~half — rehearsal remaining)
 
@@ -176,6 +177,7 @@ Resolved (kept here so nobody re-proposes them): real LLM generation via the fin
   - **PO approval enforced server-side** — `/ops/approve` only checked the keys existed, so a direct API call approved a PO for quantity 0 / ₹0 (the Flutter gate was the only guard). Now positive int quantity + positive finite amount, and only those two keys merge into `final_output` (a stray `agent_output` key could overwrite the AI draft in the approved record).
   - **Audit-trail timestamps** — `approved_at` used naive `utcnow()`, which Postgres (tz `Asia/Calcutta`) read as IST, so approvals were filed 5.5h *before* their trigger. Flutter's detail dialog also showed UTC while the History list showed DB wall-clock. Both fixed; one shared `formatTimestamp()` does `toLocal()`.
   - Verified live on `handled-ops`: `seed_demo.py` (0 fallback rows), Flutter web UI (dashboard, approval gating incl. zeros, approve → History → detail trail), cross-tenant approve → 404. pytest **44/44**, `flutter test` **36/36**, `flutter analyze` clean, `test_rls_manual.py` 7/7.
+  - **Concurrent decisions** — `/ops/approve` read-then-wrote with no lock; two people deciding at once both got 200 and the second overwrote the first (live: 4/5 trials, once a row marked `rejected` still holding an approved quantity). Now `SELECT … FOR UPDATE`; loser gets 400. pytest **45/45**.
   - This laptop's Flutter SDK (3.44.6) resolves older `intl`/`matcher` than the committed `pubspec.lock` — don't commit the lock churn from here.
 - **Next:** rehearse the demo script end-to-end; address the PO-draft quality findings from `eval_ops_quality.py` (see Progress.md "Still open"). `docs/Status_and_Approach.md` has the per-category plan for the remaining weeks.
 

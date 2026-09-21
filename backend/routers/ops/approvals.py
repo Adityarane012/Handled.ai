@@ -119,11 +119,15 @@ def approve_action(payload: ApprovalRequest, db: Session = Depends(get_db), ctx=
     Approve or reject a pending action.
     The frontend must pass the manual_fields (e.g. quantity, amount) for approval_required tools.
     """
+    # FOR UPDATE: two people deciding the same action at once would otherwise
+    # both read "pending" and both write — the second silently overwriting the
+    # first's decision (seen: a row marked rejected still carrying an approved
+    # quantity). The lock makes the second request wait, re-read, and get 400.
     action = db.query(AgentAction).filter(
         AgentAction.id == payload.action_id,
         AgentAction.company_id == ctx.company_id
-    ).first()
-    
+    ).with_for_update().first()
+
     if not action:
         raise HTTPException(status_code=404, detail="Action not found")
         

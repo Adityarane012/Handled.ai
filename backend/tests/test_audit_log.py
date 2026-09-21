@@ -280,3 +280,45 @@ def test_approved_at_is_not_before_created_at(client, make_company, admin_conn):
     created, approved = admin_conn.execute(text(
         "SELECT created_at, approved_at FROM agent_action WHERE id = :i"), {"i": pid}).fetchone()
     assert approved >= created
+
+
+def test_concurrent_decisions_cannot_both_succeed(client, make_company, admin_conn):
+    # Two people deciding the same action at the same moment: exactly one may
+    # win. Before the row lock, both returned 200 and the second silently
+    # overwrote the first — once leaving a row 'rejected' that still carried
+    # an approved quantity.
+    import threading
+
+    co = make_company()
+    H = co["headers"]
+    for _ in range(5):
+        pid = client.post("/ops/purchase-order",
+                          json={"item_name": "Gasket", "current_stock": 4}, headers=H).json()["id"]
+        bodies = [
+            {"action_id": pid, "decision": "approved",
+             "manual_fields": {"quantity": 10, "amount": 100.0}, "note": "approver"},
+            {"action_id": pid, "decision": "rejected", "note": "rejecter"},
+        ]
+        codes = [None, None]
+        barrier = threading.Barrier(2)
+
+        def decide(i):
+            barrier.wait()
+            codes[i] = client.post("/ops/approve", json=bodies[i], headers=H).status_code
+
+        threads = [threading.Thread(target=decide, args=(i,)) for i in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert sorted(codes) == [200, 400]
+        status, note, final = admin_conn.execute(text(
+            "SELECT status, decision_note, final_output FROM agent_action WHERE id = :i"),
+            {"i": pid}).fetchone()
+        winner = codes.index(200)
+        # The stored row is entirely the winner's decision — nothing mixed in.
+        if winner == 0:
+            assert (status, note) == ("executed", "approver") and final["quantity"] == 10
+        else:
+            assert (status, note, final) == ("rejected", "rejecter", None)
