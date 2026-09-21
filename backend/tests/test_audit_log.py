@@ -264,3 +264,19 @@ def test_approve_cannot_overwrite_draft_via_manual_fields(client, make_company, 
         "SELECT final_output FROM agent_action WHERE id = :i"), {"i": pid}).scalar()
     assert final["agent_output"] == agent_output
 
+
+def test_approved_at_is_not_before_created_at(client, make_company, admin_conn):
+    # A naive datetime.utcnow() was read as the DB's local zone (IST), filing
+    # approvals 5.5h *before* the action they approved.
+    co = make_company()
+    H = co["headers"]
+    pid = client.post("/ops/purchase-order",
+                      json={"item_name": "Gasket", "current_stock": 4}, headers=H).json()["id"]
+    client.post("/ops/approve", json={
+        "action_id": pid, "decision": "approved",
+        "manual_fields": {"quantity": 5, "amount": 100.0},
+    }, headers=H)
+
+    created, approved = admin_conn.execute(text(
+        "SELECT created_at, approved_at FROM agent_action WHERE id = :i"), {"i": pid}).fetchone()
+    assert approved >= created

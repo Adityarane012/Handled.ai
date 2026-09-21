@@ -159,7 +159,9 @@ def approve_action(payload: ApprovalRequest, db: Session = Depends(get_db), ctx=
     # vendor confirmed the price" is worth keeping too.
     if payload.note and payload.note.strip():
         action.decision_note = payload.note.strip()
-    action.approved_at = datetime.utcnow()
+    # tz-aware: a naive utcnow() is read as the DB server's local zone (IST
+    # here), which filed every approval 5.5h before the action was triggered.
+    action.approved_at = datetime.now(timezone.utc)
     
     db.commit()
     return {"status": action.status, "action_id": str(action.id)}

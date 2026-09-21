@@ -223,9 +223,7 @@ class _HistoryCard extends StatelessWidget {
               OpsBadge(text: kStatusLabels[status] ?? status, color: kStatusColors[status] ?? AppTheme.textSecondary),
               const Spacer(),
               Text(
-                createdAt != null && createdAt.length >= 16
-                    ? createdAt.substring(0, 16).replaceFirst('T', ' ')
-                    : '',
+                formatTimestamp(createdAt) ?? '',
                 style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
               ),
             ],

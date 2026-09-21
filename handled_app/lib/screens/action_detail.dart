@@ -220,8 +220,8 @@ class _ActionDetailDialog extends StatelessWidget {
   }
 
   Widget _trail(BuildContext context) {
-    final created = _formatTs(action['created_at']);
-    final approvedAt = _formatTs(action['approved_at']);
+    final created = formatTimestamp(action['created_at']);
+    final approvedAt = formatTimestamp(action['approved_at']);
     final requestedBy = action['requested_by_name'] as String?;
     final approvedBy = action['approved_by_name'] as String?;
     final decided = _status == 'rejected' ? 'Rejected' : 'Approved';
@@ -326,18 +326,4 @@ class _ActionDetailDialog extends StatelessWidget {
         ),
         child: child,
       );
-}
-
-/// "2026-09-19T14:32:10.12" -> "19 Sep 2026, 14:32"
-String? _formatTs(dynamic raw) {
-  if (raw == null) return null;
-  final dt = DateTime.tryParse(raw.toString());
-  if (dt == null) return raw.toString();
-  const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-  ];
-  final hh = dt.hour.toString().padLeft(2, '0');
-  final mm = dt.minute.toString().padLeft(2, '0');
-  return '${dt.day} ${months[dt.month - 1]} ${dt.year}, $hh:$mm';
 }

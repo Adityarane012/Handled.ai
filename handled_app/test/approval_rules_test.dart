@@ -85,4 +85,22 @@ void main() {
       }
     });
   });
+
+  group('formatTimestamp', () {
+    test('converts offset-aware API timestamps to local time', () {
+      // Two spellings of the same instant must render identically — the
+      // audit trail once showed "approved" before "triggered" because one
+      // path stayed in UTC and the other didn't.
+      expect(formatTimestamp('2026-09-21T07:29:00+00:00'),
+          formatTimestamp('2026-09-21T12:59:00+05:30'));
+      final local = DateTime.parse('2026-09-21T07:29:00Z').toLocal();
+      expect(formatTimestamp('2026-09-21T07:29:00+00:00'),
+          contains('${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}'));
+    });
+
+    test('null stays null and junk is shown as-is', () {
+      expect(formatTimestamp(null), isNull);
+      expect(formatTimestamp('not a date'), 'not a date');
+    });
+  });
 }

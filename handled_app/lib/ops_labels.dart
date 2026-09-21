@@ -88,6 +88,22 @@ bool manualFiguresAreUsable(String quantityText, String amountText) {
   return q > 0 && a > 0;
 }
 
+/// "2026-09-19T09:02:10+00:00" -> "19 Sep 2026, 14:32" in the viewer's
+/// local zone. The API sends offset-aware timestamps; without toLocal() a
+/// parsed value stays in UTC and the audit trail reads 5.5h off in India.
+String? formatTimestamp(dynamic raw) {
+  if (raw == null) return null;
+  final dt = DateTime.tryParse(raw.toString())?.toLocal();
+  if (dt == null) return raw.toString();
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+  final hh = dt.hour.toString().padLeft(2, '0');
+  final mm = dt.minute.toString().padLeft(2, '0');
+  return '${dt.day} ${months[dt.month - 1]} ${dt.year}, $hh:$mm';
+}
+
 /// Renders a value that may legitimately be absent (no data yet) as "—"
 /// rather than a misleading 0%.
 String formatPercent(dynamic rate) {
